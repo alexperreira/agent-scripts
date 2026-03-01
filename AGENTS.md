@@ -64,6 +64,14 @@ After making changes:
   - Quote any git paths containing brackets/parentheses so the shell doesn’t treat them as globs/subshells.
 - When running `git rebase`, avoid opening editors: use `GIT_EDITOR=:` and `GIT_SEQUENCE_EDITOR=:` (or `--no-edit`).
 
+## Git Policy (default for agent work)
+- Default workflow: create a branch, commit early/often, and push the branch for cross-machine continuity.
+  - Branch naming suggestion: `agent/<repo>/<YYYYMMDD>-<topic>`
+- PRs are recommended by default and required for higher-risk changes:
+  - Required: behavior changes (scripts/automation/generators), dependency/tooling changes, security-sensitive changes, large diffs, or repos with collaborators/branch protections.
+  - Optional: docs-only and small, low-risk changes in personal repos.
+- Project-scoped `AGENTS.md` may tighten/override this policy.
+
 ## Filesystem Conventions
 - Prefer working in a dedicated projects directory inside WSL (commonly `~/Projects`); if unknown, ask.
 - Use `/tmp` for scratch downloads/patch staging.
