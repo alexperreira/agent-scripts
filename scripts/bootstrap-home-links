@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+bootstrap-home-links — ensure home-level symlinks point to this repo
+
+Creates/updates:
+  ~/AGENTS.md   -> <this-repo>/AGENTS.md
+  ~/scripts     -> <this-repo>/scripts
+  ~/templates   -> <this-repo>/templates
+
+Default mode is dry-run. Use --apply to make changes.
+
+Usage:
+  scripts/bootstrap-home-links [--apply] [--repo <path>] [--help]
+
+Options:
+  --apply          Perform changes (otherwise prints intended actions only)
+  --repo           Repo root (default: auto-detect from this script path)
+  --help, -h       Show this help
+EOF
+}
+
+die() {
+  echo "error: $*" >&2
+  exit 1
+}
+
+REPO_ROOT=""
+DO_APPLY="false"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --apply)
+      DO_APPLY="true"; shift ;;
+    --repo)
+      REPO_ROOT="${2:-}"; shift 2 ;;
+    --help|-h)
+      usage; exit 0 ;;
+    *)
+      die "unknown argument: $1" ;;
+  esac
+done
+
+if [[ -z "$REPO_ROOT" ]]; then
+  SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+  REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+else
+  REPO_ROOT="$(cd "$REPO_ROOT" && pwd)"
+fi
+
+[[ -f "${REPO_ROOT}/AGENTS.md" ]] || die "missing ${REPO_ROOT}/AGENTS.md"
+[[ -d "${REPO_ROOT}/scripts" ]] || die "missing ${REPO_ROOT}/scripts"
+[[ -d "${REPO_ROOT}/templates" ]] || die "missing ${REPO_ROOT}/templates"
+
+declare -a links=(
+  "${HOME}/AGENTS.md|${REPO_ROOT}/AGENTS.md"
+  "${HOME}/scripts|${REPO_ROOT}/scripts"
+  "${HOME}/templates|${REPO_ROOT}/templates"
+)
+
+for spec in "${links[@]}"; do
+  target="${spec%%|*}"
+  source="${spec##*|}"
+
+  if [[ -L "$target" ]]; then
+    current="$(readlink -f "$target" || true)"
+    if [[ "$current" == "$source" ]]; then
+      echo "ok: $target -> $source"
+      continue
+    fi
+    if [[ "$DO_APPLY" == "true" ]]; then
+      ln -sfn "$source" "$target"
+      echo "updated: $target -> $source"
+    else
+      echo "would update: $target -> $source (currently -> $current)"
+    fi
+    continue
+  fi
+
+  if [[ -e "$target" ]]; then
+    echo "skip: $target exists and is not a symlink"
+    echo "      move it aside manually if you want this script to manage it"
+    continue
+  fi
+
+  if [[ "$DO_APPLY" == "true" ]]; then
+    ln -s "$source" "$target"
+    echo "created: $target -> $source"
+  else
+    echo "would create: $target -> $source"
+  fi
+done
+

@@ -99,6 +99,7 @@ After making changes:
 - Templates: `~/templates` (symlinked to your canonical templates repo)
 - Project generator: `~/scripts/new-project`
 - Agent session helper: `~/scripts/agent-session` (branch + push + local snapshots)
+- Bootstrap symlinks: `~/scripts/bootstrap-home-links --apply`
 
 ### Slash commands
 - Global: `~/.codex/prompts/`
