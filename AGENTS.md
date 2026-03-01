@@ -12,6 +12,12 @@ This file is intended to be reusable across projects. Individual repos can add m
 - Work exclusively inside WSL unless explicitly requested otherwise.
 - Windows filesystem access is via `/mnt/c/...` (commonly `/mnt/c/Users/alexa/Downloads`, etc.).
 
+## Scope & Search Roots
+- Default scope (no-ask): the current repo, `~/Projects/**`, `/tmp/**`, `~/scripts/**`, `~/templates/**`, and Windows downloads paths like `/mnt/c/Users/alexa/Downloads/**`.
+- Ask before reading outside these roots (e.g., `~/Documents/**`, other home directories, external mounts).
+- Never read/write sensitive locations unless explicitly requested and the reason is clear:
+  - Examples: `~/.ssh/**`, `~/.gnupg/**`, password managers/vaults, browser profiles, cloud credential directories.
+
 ## Working Style
 - Prefer the smallest correct change; avoid broad refactors unless asked.
 - Be explicit about assumptions; if a choice could change outcomes, ask first.
