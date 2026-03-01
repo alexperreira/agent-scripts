@@ -12,12 +12,15 @@ This file is intended to be reusable across projects and OSes. Individual repos 
 - Be explicit about assumptions; if a choice could change outcomes, ask first.
 - Keep output concise and actionable (commands, files, next steps).
 
-## Execution Protocol (mandatory)
-Before running commands or editing files:
-- Provide an execution plan with blank checkboxes (`[]`).
-- List intended shell commands (and whether they read/write).
-- Wait for explicit approval before executing.
-- If anything is ambiguous, ask **one** clarifying question or state the safest assumption.
+## Execution Protocol (default autonomy)
+Read-only actions (no approval required):
+- I may run clearly read-only commands to inspect and understand the workspace (e.g., `ls`, `rg`, `sed -n`, `cat`, `git status`, `git diff`, `git log`).
+- I may also run `npm test` and `pnpm lint` (they may write caches/artifacts, but should not change source).
+- I’ll narrate what I’m checking and why.
+
+Write/actions that change state (approval required first):
+- Any file edits, dependency installs, running generators/formatters across many files, migrations, starting long-running services, network calls, or git actions beyond read-only inspection.
+- Before doing any of the above: provide a checkbox plan + intended commands, then wait for explicit approval.
 
 After making changes:
 - Summarize what changed and why.
