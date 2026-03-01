@@ -1,11 +1,16 @@
 # AGENTS.md — Machine-Wide Defaults (Alex Perreira)
 
-This file is intended to be reusable across projects and OSes. Individual repos can add more-specific `AGENTS.md` files in subdirectories to override/extend these rules.
+This file is intended to be reusable across projects. Individual repos can add more-specific `AGENTS.md` files in subdirectories to override/extend these rules.
 
 ## Identity
 - Owner: Alex Perreira
 - GitHub: `@alexperreira`
 - Site/blog: `alexhacks.net`
+
+## Environment (WSL-first)
+- Primary setup: Windows host + WSL2 Ubuntu.
+- Work exclusively inside WSL unless explicitly requested otherwise.
+- Windows filesystem access is via `/mnt/c/...` (commonly `/mnt/c/Users/alexa/Downloads`, etc.).
 
 ## Working Style
 - Prefer the smallest correct change; avoid broad refactors unless asked.
@@ -54,9 +59,9 @@ After making changes:
 - When running `git rebase`, avoid opening editors: use `GIT_EDITOR=:` and `GIT_SEQUENCE_EDITOR=:` (or `--no-edit`).
 
 ## Filesystem Conventions
-- Prefer working in a dedicated projects directory (commonly `~/Projects`); if unknown, ask.
+- Prefer working in a dedicated projects directory inside WSL (commonly `~/Projects`); if unknown, ask.
 - Use `/tmp` for scratch downloads/patch staging.
-- Don’t assume macOS-specific tools; prefer cross-platform equivalents or detect availability.
+- Prefer Linux CLI tools; avoid macOS-specific commands unless explicitly requested.
 
 ## Network / Tooling Notes
 - Network access may be restricted in some environments; if outbound access is needed, provide commands the user can run locally.
