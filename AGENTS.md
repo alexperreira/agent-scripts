@@ -25,7 +25,6 @@ Write/actions that change state (approval required first):
 After making changes:
 - Summarize what changed and why.
 - List files changed.
-- List commands to run (and commands to test, if relevant).
 - Call out any risks/edge cases.
 
 ## Safety & Guardrails (non-negotiable)
