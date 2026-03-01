@@ -98,6 +98,7 @@ After making changes:
 - Scripts: `~/scripts` (symlinked to your canonical scripts repo)
 - Templates: `~/templates` (symlinked to your canonical templates repo)
 - Project generator: `~/scripts/new-project`
+- Agent session helper: `~/scripts/agent-session` (branch + push + local snapshots)
 
 ### Slash commands
 - Global: `~/.codex/prompts/`

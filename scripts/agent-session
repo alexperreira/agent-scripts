@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+agent-session — start an agent work session with a branch + local snapshots
+
+This tool is intended to make cross-machine continuity easy via "branch + push",
+and to leave small local breadcrumbs under:
+  ~/.local/share/agent-logs/<repo>/<session-id>/
+
+Usage:
+  scripts/agent-session --topic "<topic>" [options]
+
+Options:
+  --topic                 Short description (used in branch name + meta) (required)
+  --repo                  Path to a git repo (default: current directory)
+  --date                  YYYYMMDD (default: today)
+  --log-root              Log root (default: ~/.local/share/agent-logs)
+  --diff                  stat|full|none (default: stat)
+  --checkout              Create+checkout branch (default: true)
+  --no-checkout           Do not create/switch branches
+  --push                  Push branch to origin and set upstream
+  --remote                Remote name (default: origin)
+  --branch                Explicit branch name (overrides default)
+  --help, -h              Show this help
+
+Examples:
+  scripts/agent-session --topic "add wsl-safe delete tools" --push
+  scripts/agent-session --topic "investigate failing tests" --diff full --no-checkout
+EOF
+}
+
+die() {
+  echo "error: $*" >&2
+  exit 1
+}
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
+}
+
+slugify() {
+  # Lowercase, keep alnum + dashes, convert other runs to single dash.
+  # shellcheck disable=SC2001
+  echo "$1" \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-{2,}/-/g'
+}
+
+TOPIC=""
+REPO_DIR="."
+DATE_YYYYMMDD="$(date +%Y%m%d)"
+LOG_ROOT="${HOME}/.local/share/agent-logs"
+DIFF_MODE="stat"
+DO_CHECKOUT="true"
+DO_PUSH="false"
+REMOTE_NAME="origin"
+EXPLICIT_BRANCH=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --topic)
+      TOPIC="${2:-}"; shift 2 ;;
+    --repo)
+      REPO_DIR="${2:-}"; shift 2 ;;
+    --date)
+      DATE_YYYYMMDD="${2:-}"; shift 2 ;;
+    --log-root)
+      LOG_ROOT="${2:-}"; shift 2 ;;
+    --diff)
+      DIFF_MODE="${2:-}"; shift 2 ;;
+    --checkout)
+      DO_CHECKOUT="true"; shift ;;
+    --no-checkout)
+      DO_CHECKOUT="false"; shift ;;
+    --push)
+      DO_PUSH="true"; shift ;;
+    --remote)
+      REMOTE_NAME="${2:-}"; shift 2 ;;
+    --branch)
+      EXPLICIT_BRANCH="${2:-}"; shift 2 ;;
+    --help|-h)
+      usage; exit 0 ;;
+    *)
+      die "unknown argument: $1" ;;
+  esac
+done
+
+[[ -n "$TOPIC" ]] || die "--topic is required"
+
+case "$DIFF_MODE" in
+  stat|full|none) ;;
+  *) die "--diff must be stat|full|none (got: $DIFF_MODE)" ;;
+esac
+
+require_cmd git
+require_cmd sed
+require_cmd date
+
+REPO_DIR="$(cd "$REPO_DIR" && pwd)"
+
+git -C "$REPO_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not a git repo: $REPO_DIR"
+
+REPO_NAME="$(basename "$(git -C "$REPO_DIR" rev-parse --show-toplevel)")"
+TOPIC_SLUG="$(slugify "$TOPIC")"
+
+if [[ -n "$EXPLICIT_BRANCH" ]]; then
+  BRANCH_NAME="$EXPLICIT_BRANCH"
+else
+  BRANCH_NAME="agent/${REPO_NAME}/${DATE_YYYYMMDD}-${TOPIC_SLUG}"
+fi
+
+SESSION_ID="$(date +%Y%m%d-%H%M%S)"
+SESSION_DIR="${LOG_ROOT}/${REPO_NAME}/${SESSION_ID}"
+
+mkdir -p "$SESSION_DIR"
+
+HEAD_SHA="$(git -C "$REPO_DIR" rev-parse HEAD)"
+CURRENT_BRANCH="$(git -C "$REPO_DIR" rev-parse --abbrev-ref HEAD)"
+REMOTE_URL="$(git -C "$REPO_DIR" remote get-url "$REMOTE_NAME" 2>/dev/null || true)"
+
+{
+  echo "timestamp: $(date -Is)"
+  echo "repo_name: ${REPO_NAME}"
+  echo "repo_dir: ${REPO_DIR}"
+  echo "head_sha: ${HEAD_SHA}"
+  echo "current_branch: ${CURRENT_BRANCH}"
+  echo "new_branch: ${BRANCH_NAME}"
+  echo "topic: ${TOPIC}"
+  echo "diff_mode: ${DIFF_MODE}"
+  echo "remote_name: ${REMOTE_NAME}"
+  echo "remote_url: ${REMOTE_URL}"
+} >"${SESSION_DIR}/meta.txt"
+
+git -C "$REPO_DIR" status -sb >"${SESSION_DIR}/status.txt" || true
+git -C "$REPO_DIR" remote -v >"${SESSION_DIR}/remotes.txt" || true
+git -C "$REPO_DIR" log -n 30 --oneline --decorate >"${SESSION_DIR}/log.txt" || true
+
+case "$DIFF_MODE" in
+  none)
+    : ;;
+  stat)
+    git -C "$REPO_DIR" diff --stat >"${SESSION_DIR}/diff.stat.txt" || true
+    git -C "$REPO_DIR" diff --cached --stat >"${SESSION_DIR}/diff.cached.stat.txt" || true
+    ;;
+  full)
+    git -C "$REPO_DIR" diff >"${SESSION_DIR}/diff.patch" || true
+    git -C "$REPO_DIR" diff --cached >"${SESSION_DIR}/diff.cached.patch" || true
+    ;;
+esac
+
+if [[ "$DO_CHECKOUT" == "true" ]]; then
+  if git -C "$REPO_DIR" show-ref --verify --quiet "refs/heads/${BRANCH_NAME}"; then
+    git -C "$REPO_DIR" checkout "$BRANCH_NAME" >/dev/null
+  else
+    git -C "$REPO_DIR" checkout -b "$BRANCH_NAME" >/dev/null
+  fi
+fi
+
+if [[ "$DO_PUSH" == "true" ]]; then
+  [[ -n "$REMOTE_URL" ]] || die "remote '${REMOTE_NAME}' not configured; can't push"
+  git -C "$REPO_DIR" push -u "$REMOTE_NAME" "$BRANCH_NAME"
+fi
+
+echo "Session:  ${SESSION_ID}"
+echo "Repo:     ${REPO_NAME}"
+echo "Branch:   ${BRANCH_NAME}"
+echo "Logs:     ${SESSION_DIR}"
+echo "Next:"
+if [[ "$DO_CHECKOUT" == "true" ]]; then
+  echo "  cd \"${REPO_DIR}\""
+  echo "  git status"
+  if [[ "$DO_PUSH" != "true" ]]; then
+    echo "  git push -u ${REMOTE_NAME} \"${BRANCH_NAME}\""
+  fi
+else
+  echo "  (no branch checkout performed)"
+fi
+
