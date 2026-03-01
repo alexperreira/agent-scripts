@@ -80,3 +80,25 @@ After making changes:
 ## Network / Tooling Notes
 - Network access may be restricted in some environments; if outbound access is needed, provide commands the user can run locally.
 - Prefer fast local search tools (`rg`) when available.
+
+## Tools
+
+### Safe delete (WSL)
+- Prefer a trash-based delete over permanent deletion.
+- If available: `trash-put <path>` (from `trash-cli`).
+  - Install (Ubuntu): `sudo apt-get update && sudo apt-get install -y trash-cli`
+- Fallback: `gio trash <path>` (often available via `gvfs`).
+
+### Core CLI
+- Search: `rg`
+- GitHub: `gh`
+- Session persistence (optional): `tmux`
+
+### Alex’s Canonical Paths
+- Scripts: `~/scripts` (symlinked to your canonical scripts repo)
+- Templates: `~/templates` (symlinked to your canonical templates repo)
+- Project generator: `~/scripts/new-project`
+
+### Slash commands
+- Global: `~/.codex/prompts/`
+- Repo-local (optional): `docs/slash-commands/`
