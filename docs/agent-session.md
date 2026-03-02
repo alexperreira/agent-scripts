@@ -21,6 +21,8 @@ This repo provides `scripts/agent-session` to automate the branch naming and cre
 scripts/agent-session --topic "short description" --push
 ```
 
+`--push` requires checkout mode (default). If you pass `--no-checkout`, push manually after selecting/creating the branch you want.
+
 ### Diff capture
 
 By default the script stores diff *stats* only (`--diff stat`) to avoid large logs and reduce accidental leakage.
@@ -28,4 +30,3 @@ By default the script stores diff *stats* only (`--diff stat`) to avoid large lo
 - `--diff none`: no diffs
 - `--diff stat`: `git diff --stat` (default)
 - `--diff full`: full patch snapshots (`git diff`, `git diff --cached`)
-

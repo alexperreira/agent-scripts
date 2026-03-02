@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh"
+
 usage() {
   cat <<'EOF'
 agent-session — start an agent work session with a branch + local snapshots
@@ -31,15 +35,6 @@ Examples:
 EOF
 }
 
-die() {
-  echo "error: $*" >&2
-  exit 1
-}
-
-require_cmd() {
-  command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
-}
-
 slugify() {
   # Lowercase, keep alnum + dashes, convert other runs to single dash.
   # shellcheck disable=SC2001
@@ -61,14 +56,19 @@ EXPLICIT_BRANCH=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --topic)
+      require_arg_value "$1" "${2:-}"
       TOPIC="${2:-}"; shift 2 ;;
     --repo)
+      require_arg_value "$1" "${2:-}"
       REPO_DIR="${2:-}"; shift 2 ;;
     --date)
+      require_arg_value "$1" "${2:-}"
       DATE_YYYYMMDD="${2:-}"; shift 2 ;;
     --log-root)
+      require_arg_value "$1" "${2:-}"
       LOG_ROOT="${2:-}"; shift 2 ;;
     --diff)
+      require_arg_value "$1" "${2:-}"
       DIFF_MODE="${2:-}"; shift 2 ;;
     --checkout)
       DO_CHECKOUT="true"; shift ;;
@@ -77,8 +77,10 @@ while [[ $# -gt 0 ]]; do
     --push)
       DO_PUSH="true"; shift ;;
     --remote)
+      require_arg_value "$1" "${2:-}"
       REMOTE_NAME="${2:-}"; shift 2 ;;
     --branch)
+      require_arg_value "$1" "${2:-}"
       EXPLICIT_BRANCH="${2:-}"; shift 2 ;;
     --help|-h)
       usage; exit 0 ;;
@@ -109,6 +111,11 @@ if [[ -n "$EXPLICIT_BRANCH" ]]; then
   BRANCH_NAME="$EXPLICIT_BRANCH"
 else
   BRANCH_NAME="agent/${REPO_NAME}/${DATE_YYYYMMDD}-${TOPIC_SLUG}"
+fi
+
+[[ -n "$TOPIC_SLUG" ]] || die "topic must contain at least one letter or number"
+if [[ "$DO_PUSH" == "true" && "$DO_CHECKOUT" != "true" ]]; then
+  die "--push requires checkout; remove --no-checkout or push manually afterward"
 fi
 
 SESSION_ID="$(date +%Y%m%d-%H%M%S)"
@@ -177,4 +184,3 @@ if [[ "$DO_CHECKOUT" == "true" ]]; then
 else
   echo "  (no branch checkout performed)"
 fi
-

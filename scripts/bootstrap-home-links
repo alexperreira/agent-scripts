@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh"
+
 usage() {
   cat <<'EOF'
 bootstrap-home-links — ensure home-level symlinks point to this repo
@@ -22,11 +26,6 @@ Options:
 EOF
 }
 
-die() {
-  echo "error: $*" >&2
-  exit 1
-}
-
 REPO_ROOT=""
 DO_APPLY="false"
 
@@ -35,6 +34,7 @@ while [[ $# -gt 0 ]]; do
     --apply)
       DO_APPLY="true"; shift ;;
     --repo)
+      require_arg_value "$1" "${2:-}"
       REPO_ROOT="${2:-}"; shift 2 ;;
     --help|-h)
       usage; exit 0 ;;
@@ -44,7 +44,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$REPO_ROOT" ]]; then
-  SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
   REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 else
   REPO_ROOT="$(cd "$REPO_ROOT" && pwd)"
@@ -92,4 +91,3 @@ for spec in "${links[@]}"; do
     echo "would create: $target -> $source"
   fi
 done
-

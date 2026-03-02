@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh"
+
 usage() {
   cat <<'EOF'
 new-project — create a new repo under ~/Projects and publish to GitHub
@@ -29,17 +33,15 @@ Examples:
 EOF
 }
 
-die() {
-  echo "error: $*" >&2
-  exit 1
-}
-
-require_cmd() {
-  command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
-}
-
 is_kebab_case() {
   [[ "${1}" =~ ^[a-z0-9]+([-.][a-z0-9]+)*$ ]]
+}
+
+escape_sed_replacement() {
+  local value="${1//\\/\\\\}"
+  value="${value//&/\\&}"
+  value="${value//\//\\/}"
+  printf '%s' "$value"
 }
 
 render_template() {
@@ -47,15 +49,28 @@ render_template() {
   # Replaces {{VAR}} tokens with corresponding env vars.
   local template_path="$1"
   local output_path="$2"
+  local esc_project_name
+  local esc_description
+  local esc_tech_stack
+  local esc_author
+  local esc_github_owner
+  local esc_website
+
+  esc_project_name="$(escape_sed_replacement "$PROJECT_NAME")"
+  esc_description="$(escape_sed_replacement "$DESCRIPTION")"
+  esc_tech_stack="$(escape_sed_replacement "$TECH_STACK")"
+  esc_author="$(escape_sed_replacement "$AUTHOR")"
+  esc_github_owner="$(escape_sed_replacement "$GITHUB_OWNER")"
+  esc_website="$(escape_sed_replacement "$WEBSITE")"
 
   local sed_expr=()
-  sed_expr+=("-e" "s/{{PROJECT_NAME}}/${PROJECT_NAME//\//\\/}/g")
-  sed_expr+=("-e" "s/{{DESCRIPTION}}/${DESCRIPTION//\//\\/}/g")
-  sed_expr+=("-e" "s/{{TECH_STACK}}/${TECH_STACK//\//\\/}/g")
+  sed_expr+=("-e" "s/{{PROJECT_NAME}}/${esc_project_name}/g")
+  sed_expr+=("-e" "s/{{DESCRIPTION}}/${esc_description}/g")
+  sed_expr+=("-e" "s/{{TECH_STACK}}/${esc_tech_stack}/g")
   sed_expr+=("-e" "s/{{YEAR}}/${YEAR}/g")
-  sed_expr+=("-e" "s/{{AUTHOR}}/${AUTHOR//\//\\/}/g")
-  sed_expr+=("-e" "s/{{GITHUB_OWNER}}/${GITHUB_OWNER//\//\\/}/g")
-  sed_expr+=("-e" "s/{{WEBSITE}}/${WEBSITE//\//\\/}/g")
+  sed_expr+=("-e" "s/{{AUTHOR}}/${esc_author}/g")
+  sed_expr+=("-e" "s/{{GITHUB_OWNER}}/${esc_github_owner}/g")
+  sed_expr+=("-e" "s/{{WEBSITE}}/${esc_website}/g")
 
   sed "${sed_expr[@]}" "$template_path" >"$output_path"
 }
@@ -128,18 +143,25 @@ YEAR="$(date +%Y)"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --name|-n)
+      require_arg_value "$1" "${2:-}"
       PROJECT_NAME="${2:-}"; shift 2 ;;
     --visibility)
+      require_arg_value "$1" "${2:-}"
       VISIBILITY="${2:-}"; shift 2 ;;
     --stack)
+      require_arg_value "$1" "${2:-}"
       TECH_STACK="${2:-}"; shift 2 ;;
     --description)
+      require_arg_value "$1" "${2:-}"
       DESCRIPTION="${2:-}"; shift 2 ;;
     --projects-dir)
+      require_arg_value "$1" "${2:-}"
       PROJECTS_DIR="${2:-}"; shift 2 ;;
     --license)
+      require_arg_value "$1" "${2:-}"
       LICENSE_KIND="${2:-}"; shift 2 ;;
     --owner)
+      require_arg_value "$1" "${2:-}"
       GITHUB_OWNER="${2:-}"; shift 2 ;;
     --no-remote)
       CREATE_REMOTE="false"; shift ;;
@@ -194,7 +216,6 @@ require_cmd date
 
 mkdir -p "$TARGET_DIR"
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATE_DIR="${SCRIPT_DIR}/../templates/empty"
 
 [[ -d "$TEMPLATE_DIR" ]] || die "missing templates: $TEMPLATE_DIR"
@@ -240,4 +261,3 @@ echo "Done."
 echo "Next:"
 echo "  cd \"${TARGET_DIR}\""
 echo "  code .   # if VS Code is installed in WSL"
-

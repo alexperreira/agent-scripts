@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh"
+
+usage() {
+  cat <<'EOF'
+check — run lightweight local quality checks for agent-scripts
+
+Usage:
+  scripts/check [--require-shellcheck] [--help]
+
+Options:
+  --require-shellcheck   Fail if shellcheck is not installed
+  --help, -h             Show this help
+EOF
+}
+
+REQUIRE_SHELLCHECK="false"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --require-shellcheck)
+      REQUIRE_SHELLCHECK="true"; shift ;;
+    --help|-h)
+      usage; exit 0 ;;
+    *)
+      die "unknown argument: $1" ;;
+  esac
+done
+
+expect_fail_contains() {
+  local needle="$1"
+  shift
+
+  local output
+  if output="$("$@" 2>&1)"; then
+    die "expected command to fail: $*"
+  fi
+
+  [[ "$output" == *"$needle"* ]] || die "unexpected error output for: $*"
+}
+
+echo "==> Syntax checks (bash -n)"
+bash -n "${SCRIPT_DIR}/new-project"
+bash -n "${SCRIPT_DIR}/agent-session"
+bash -n "${SCRIPT_DIR}/bootstrap-home-links"
+bash -n "${SCRIPT_DIR}/lib/common.sh"
+
+echo "==> CLI help smoke checks"
+"${SCRIPT_DIR}/new-project" --help >/dev/null
+"${SCRIPT_DIR}/agent-session" --help >/dev/null
+"${SCRIPT_DIR}/bootstrap-home-links" --help >/dev/null
+"${SCRIPT_DIR}/check" --help >/dev/null
+
+echo "==> Argument guard smoke checks"
+expect_fail_contains "missing value for --owner" "${SCRIPT_DIR}/new-project" --name demo --owner --dry-run
+expect_fail_contains "missing value for --remote" "${SCRIPT_DIR}/agent-session" --topic demo --remote
+expect_fail_contains "missing value for --repo" "${SCRIPT_DIR}/bootstrap-home-links" --repo
+
+echo "==> Shellcheck"
+if command -v shellcheck >/dev/null 2>&1; then
+  shellcheck "${SCRIPT_DIR}/new-project" \
+    "${SCRIPT_DIR}/agent-session" \
+    "${SCRIPT_DIR}/bootstrap-home-links" \
+    "${SCRIPT_DIR}/check" \
+    "${SCRIPT_DIR}/lib/common.sh"
+else
+  if [[ "$REQUIRE_SHELLCHECK" == "true" ]]; then
+    die "shellcheck not installed; install it or run without --require-shellcheck"
+  fi
+  echo "note: shellcheck not installed; skipping"
+fi
+
+echo "All checks passed."

@@ -51,6 +51,22 @@ Defaults:
 Local snapshots are written to:
 - `~/.local/share/agent-logs/<repo>/<session-id>/`
 
+## Local quality checks
+
+Run lightweight syntax + smoke checks:
+
+```bash
+scripts/check
+```
+
+If you want to enforce ShellCheck in CI or stricter local runs:
+
+```bash
+scripts/check --require-shellcheck
+```
+
+This repo runs the same strict command in GitHub Actions on `main` pushes and pull requests.
+
 ## Notes
 
 - Some environments restrict network access; if `git push` fails here, run it from your local WSL shell.
