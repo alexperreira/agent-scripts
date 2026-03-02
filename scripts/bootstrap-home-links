@@ -11,6 +11,7 @@ bootstrap-home-links — ensure home-level symlinks point to this repo
 
 Creates/updates:
   ~/AGENTS.md   -> <this-repo>/AGENTS.md
+  ~/CLAUDE.md   -> <this-repo>/AGENTS.md
   ~/scripts     -> <this-repo>/scripts
   ~/templates   -> <this-repo>/templates
 
@@ -55,6 +56,7 @@ fi
 
 declare -a links=(
   "${HOME}/AGENTS.md|${REPO_ROOT}/AGENTS.md"
+  "${HOME}/CLAUDE.md|${REPO_ROOT}/AGENTS.md"
   "${HOME}/scripts|${REPO_ROOT}/scripts"
   "${HOME}/templates|${REPO_ROOT}/templates"
 )

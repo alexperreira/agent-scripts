@@ -5,7 +5,7 @@ This repo ships a simple generator for new projects that live under `~/Projects`
 ## What it does
 
 - Creates `~/Projects/<name>`
-- Writes a minimal starter layout (README, `.gitignore`, project-scoped `AGENTS.md`, optional MIT `LICENSE`)
+- Writes a minimal starter layout (README, `.gitignore`, project-scoped `AGENTS.md`, `CLAUDE.md` symlink to `AGENTS.md`, optional MIT `LICENSE`)
 - Uses `--stack` to seed the project `AGENTS.md` with suggested commands for common stacks (currently Node/TS and Python).
 - Initializes a git repo on `main` with an initial commit
 - Creates `https://github.com/alexperreira/<name>.git` via `gh` and pushes (unless `--no-remote`)

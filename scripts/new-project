@@ -230,6 +230,7 @@ render_template "${TEMPLATE_DIR}/README.md.tmpl" "${TARGET_DIR}/README.md"
 render_template "${TEMPLATE_DIR}/gitignore.tmpl" "${TARGET_DIR}/.gitignore"
 render_template "${TEMPLATE_DIR}/AGENTS.md.tmpl" "${TARGET_DIR}/AGENTS.md"
 append_stack_sections "${TARGET_DIR}/AGENTS.md"
+ln -s "AGENTS.md" "${TARGET_DIR}/CLAUDE.md"
 
 if [[ "$LICENSE_KIND" == "mit" ]]; then
   render_template "${TEMPLATE_DIR}/LICENSE-MIT.tmpl" "${TARGET_DIR}/LICENSE"

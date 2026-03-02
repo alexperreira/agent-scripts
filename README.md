@@ -26,6 +26,7 @@ scripts/bootstrap-home-links --apply
 
 This creates/updates:
 - `~/AGENTS.md` → `~/Projects/agent-scripts/AGENTS.md`
+- `~/CLAUDE.md` → `~/Projects/agent-scripts/AGENTS.md`
 - `~/scripts` → `~/Projects/agent-scripts/scripts`
 - `~/templates` → `~/Projects/agent-scripts/templates`
 
