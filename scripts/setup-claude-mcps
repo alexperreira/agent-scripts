@@ -26,7 +26,7 @@ Required keys in ~/.secrets:
   BRAVE_API_KEY    Brave Search API key (api.search.brave.com)
 
 Keyless servers (no ~/.secrets entry needed):
-  sequential-thinking, fetch
+  sequential-thinking, fetch, context7
 EOF
 }
 
@@ -78,5 +78,8 @@ run claude mcp add -s user github \
 run claude mcp add -s user brave-search \
   -e BRAVE_API_KEY="${BRAVE_API_KEY}" \
   -- npx -y @modelcontextprotocol/server-brave-search
+
+run claude mcp add -s user context7 \
+  -- npx -y @upstash/context7-mcp
 
 echo "Done. Restart Claude Code for changes to take effect."
