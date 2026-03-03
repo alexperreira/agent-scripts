@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh"
+
+SECRETS_FILE="${HOME}/.secrets"
+
+usage() {
+  cat <<'EOF'
+setup-claude-mcps — register global MCP servers for Claude Code
+
+Reads API keys from ~/.secrets. Run once per machine after initial setup
+or whenever MCP servers need to be re-registered.
+
+Usage:
+  setup-claude-mcps [options]
+
+Options:
+  --dry-run   Print commands without executing them
+  -h, --help  Show this help message
+
+Required keys in ~/.secrets:
+  GITHUB_PAT       GitHub personal access token (scopes: repo, read:org, read:user)
+  BRAVE_API_KEY    Brave Search API key (api.search.brave.com)
+
+Keyless servers (no ~/.secrets entry needed):
+  sequential-thinking, fetch
+EOF
+}
+
+DRY_RUN=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run) DRY_RUN=true; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) die "unknown option: $1" ;;
+  esac
+done
+
+run() {
+  if [[ "$DRY_RUN" == true ]]; then
+    echo "[dry-run] $*"
+  else
+    "$@"
+  fi
+}
+
+# Load secrets
+if [[ -f "$SECRETS_FILE" ]]; then
+  # shellcheck source=/dev/null
+  source "$SECRETS_FILE"
+else
+  die "~/.secrets not found. Create it with GITHUB_PAT and BRAVE_API_KEY defined."
+fi
+
+require_cmd claude
+require_cmd npx
+require_cmd uvx
+
+[[ -n "${GITHUB_PAT:-}" ]]     || die "GITHUB_PAT is not set in ${SECRETS_FILE}"
+[[ -n "${BRAVE_API_KEY:-}" ]]  || die "BRAVE_API_KEY is not set in ${SECRETS_FILE}"
+
+echo "Registering global MCP servers..."
+
+run claude mcp add -s user sequential-thinking \
+  -- npx -y @modelcontextprotocol/server-sequential-thinking
+
+run claude mcp add -s user fetch \
+  -- uvx mcp-server-fetch
+
+run claude mcp add -s user github \
+  -e GITHUB_PERSONAL_ACCESS_TOKEN="${GITHUB_PAT}" \
+  -- npx -y @modelcontextprotocol/server-github
+
+run claude mcp add -s user brave-search \
+  -e BRAVE_API_KEY="${BRAVE_API_KEY}" \
+  -- npx -y @modelcontextprotocol/server-brave-search
+
+echo "Done. Restart Claude Code for changes to take effect."
