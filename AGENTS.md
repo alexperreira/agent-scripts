@@ -157,3 +157,8 @@ See `AGENTS.md` in this directory for full instructions. All rules there apply.
 
 - Slash commands section does not apply (Codex-specific)
 - For project bootstrapping, use `~/scripts/new-project` as documented
+
+## Commit Message Policy
+
+- Do NOT add a `Co-authored-by: Claude` trailer (or any AI attribution line) to commit messages.
+- Commit messages should be clean, author-only, and not reference AI tooling.
