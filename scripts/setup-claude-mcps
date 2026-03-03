@@ -50,7 +50,11 @@ run() {
   if [[ "$DRY_RUN" == true ]]; then
     echo "[dry-run] $*"
   else
-    "$@"
+    "$@" || {
+      local exit_code=$?
+      # "already exists" errors are not fatal — skip gracefully
+      echo "  skipped (already registered or error $exit_code)"
+    }
   fi
 }
 
