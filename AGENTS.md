@@ -109,6 +109,12 @@ After making changes:
 - PRs are recommended by default and required for higher-risk changes:
   - Required: behavior changes (scripts/automation/generators), dependency/tooling changes, security-sensitive changes, large diffs, or repos with collaborators/branch protections.
   - Optional: docs-only and small, low-risk changes in personal repos.
+- **Standard PR flow** (when opening a PR):
+  1. Push the branch to remote (`git push -u origin <branch>`)
+  2. Open a PR (`gh pr create ...`)
+  3. Merge the PR (`gh pr merge --squash` or `--merge` as appropriate)
+  4. Delete the remote branch (GitHub does this automatically if configured; otherwise `git push origin --delete <branch>`)
+  5. Delete the local branch (`git branch -d <branch>`)
 - Project-scoped `AGENTS.md` may tighten/override this policy.
 
 ## Filesystem Conventions
