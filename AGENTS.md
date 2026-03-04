@@ -144,6 +144,37 @@ After making changes:
 - Project generator: `~/scripts/new-project`
 - Agent session helper: `~/scripts/agent-session` (branch + push + local snapshots)
 - Bootstrap symlinks: `~/scripts/bootstrap-home-links --apply`
+- Project registry: `~/Projects/agent-scripts/current-projects`
+- Project sync: `~/scripts/sync-projects`
+
+## Current Projects
+
+The canonical list of all projects on this machine lives in `~/Projects/agent-scripts/current-projects`.
+
+**Format:** one `owner/repo` GitHub slug per line; blank lines and `#` comments are ignored.
+
+**To add a project manually:**
+```bash
+echo "owner/repo" >> ~/Projects/agent-scripts/current-projects
+```
+
+**To sync all projects** (clone missing, pull existing):
+```bash
+~/scripts/sync-projects
+```
+Or with options:
+```bash
+~/scripts/sync-projects --dry-run          # preview only
+~/scripts/sync-projects --projects-dir /tmp/work  # alternate dir
+```
+
+**Automatic registration:** `scripts/new-project` appends the new slug to `current-projects` automatically after a successful GitHub push. No manual step needed for new projects.
+
+**Guardrails in `sync-projects`:**
+- Local branch ahead of remote → skip pull, print warning (push or PR manually)
+- Uncommitted changes → skip pull, print warning
+- Diverged history → skip pull, print warning
+- Non-git directory with same name → skip, print warning
 
 ### Slash commands
 

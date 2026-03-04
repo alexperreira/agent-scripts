@@ -253,6 +253,20 @@ if [[ "$CREATE_REMOTE" == "true" ]]; then
       gh repo create "${GITHUB_OWNER}/${PROJECT_NAME}" --public --source=. --remote=origin --push
     fi
   )
+
+  # Register in current-projects so sync-projects can track it
+  REGISTRY="${SCRIPT_DIR}/../current-projects"
+  SLUG="${GITHUB_OWNER}/${PROJECT_NAME}"
+  if [[ -f "$REGISTRY" ]]; then
+    if grep -qxF "$SLUG" "$REGISTRY"; then
+      echo "note: ${SLUG} already in current-projects."
+    else
+      echo "$SLUG" >> "$REGISTRY"
+      echo "note: added ${SLUG} to current-projects."
+    fi
+  else
+    echo "note: current-projects not found at ${REGISTRY}; skipping registration."
+  fi
 else
   echo "note: local repo created; remote creation skipped (--no-remote)."
 fi

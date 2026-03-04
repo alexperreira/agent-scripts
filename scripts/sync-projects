@@ -1,0 +1,187 @@
+#!/usr/bin/env bash
+# sync-projects — clone or update all repos listed in current-projects
+#
+# Usage:
+#   scripts/sync-projects [--projects-dir DIR] [--registry FILE] [--dry-run]
+#
+# For each "owner/repo" entry in the registry file:
+#   - If ~/Projects/<repo> doesn't exist  → git clone
+#   - If it does exist                    → git pull (on default branch)
+#
+# Guardrails:
+#   - Local main ahead of remote → SKIP pull, print warning
+#   - Uncommitted changes        → SKIP pull, print warning
+#   - Non-git directory          → SKIP, print warning
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh"
+
+PROJECTS_DIR="${HOME}/Projects"
+REGISTRY="${SCRIPT_DIR}/../current-projects"
+DRY_RUN="false"
+GITHUB_BASE="https://github.com"
+
+usage() {
+  cat <<'EOF'
+sync-projects — clone or pull all repos listed in current-projects
+
+Usage:
+  scripts/sync-projects [options]
+
+Options:
+  --projects-dir DIR    Base directory for repos (default: ~/Projects)
+  --registry FILE       Path to current-projects file
+                        (default: <repo-root>/current-projects)
+  --dry-run             Print actions without executing them
+  --help, -h            Show this help
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --projects-dir)
+      require_arg_value "$1" "${2:-}"
+      PROJECTS_DIR="${2:-}"; shift 2 ;;
+    --registry)
+      require_arg_value "$1" "${2:-}"
+      REGISTRY="${2:-}"; shift 2 ;;
+    --dry-run)
+      DRY_RUN="true"; shift ;;
+    --help|-h)
+      usage; exit 0 ;;
+    *)
+      die "unknown argument: $1" ;;
+  esac
+done
+
+require_cmd git
+
+[[ -f "$REGISTRY" ]] || die "registry not found: $REGISTRY"
+
+# Counters
+cloned=0
+pulled=0
+skipped=0
+errors=0
+
+run() {
+  # run CMD... — executes or dry-run-prints
+  if [[ "$DRY_RUN" == "true" ]]; then
+    echo "[dry-run] $*"
+  else
+    "$@"
+  fi
+}
+
+sync_repo() {
+  local slug="$1"          # owner/repo
+  local repo_name="${slug##*/}"
+  local target="${PROJECTS_DIR}/${repo_name}"
+  local clone_url="${GITHUB_BASE}/${slug}.git"
+
+  echo "── ${slug}"
+
+  # ── Clone if missing ────────────────────────────────────────────────────────
+  if [[ ! -e "$target" ]]; then
+    echo "   → cloning into ${target}"
+    run git clone "${clone_url}" "${target}"
+    (( cloned++ )) || true
+    return
+  fi
+
+  # ── Existing directory checks ────────────────────────────────────────────────
+  if [[ ! -d "${target}/.git" ]]; then
+    echo "   ⚠ WARNING: ${target} exists but is not a git repo — skipping" >&2
+    (( skipped++ )) || true
+    return
+  fi
+
+  # Detect current branch
+  local branch
+  branch=$(git -C "$target" symbolic-ref --short HEAD 2>/dev/null || echo "")
+  if [[ -z "$branch" ]]; then
+    echo "   ⚠ WARNING: ${target} is in detached HEAD state — skipping" >&2
+    (( skipped++ )) || true
+    return
+  fi
+
+  # Check for uncommitted changes (tracked files only)
+  if ! git -C "$target" diff --quiet || ! git -C "$target" diff --cached --quiet; then
+    echo "   ⚠ WARNING: ${target} has uncommitted changes — skipping pull" >&2
+    (( skipped++ )) || true
+    return
+  fi
+
+  # Fetch so we have up-to-date remote refs
+  if [[ "$DRY_RUN" != "true" ]]; then
+    git -C "$target" fetch --quiet origin 2>/dev/null || {
+      echo "   ⚠ WARNING: fetch failed for ${target} — skipping" >&2
+      (( skipped++ )) || true
+      return
+    }
+  fi
+
+  # Check if remote tracking branch exists
+  local remote_ref="origin/${branch}"
+  if ! git -C "$target" rev-parse --verify "${remote_ref}" >/dev/null 2>&1; then
+    echo "   ⚠ WARNING: no remote tracking branch '${remote_ref}' — skipping pull" >&2
+    (( skipped++ )) || true
+    return
+  fi
+
+  # Compare local vs remote
+  local local_sha remote_sha merge_base
+  local_sha=$(git -C "$target" rev-parse HEAD)
+  remote_sha=$(git -C "$target" rev-parse "${remote_ref}")
+  merge_base=$(git -C "$target" merge-base HEAD "${remote_ref}")
+
+  if [[ "$local_sha" == "$remote_sha" ]]; then
+    echo "   ✓ already up to date"
+    (( pulled++ )) || true
+    return
+  fi
+
+  if [[ "$merge_base" == "$remote_sha" ]]; then
+    # Local is ahead of remote (remote hasn't seen our commits)
+    local ahead
+    ahead=$(git -C "$target" rev-list --count "${remote_ref}..HEAD")
+    echo "   ⚠ WARNING: local '${branch}' is ${ahead} commit(s) ahead of remote — skipping pull" >&2
+    echo "             Push or PR from ${target} to sync." >&2
+    (( skipped++ )) || true
+    return
+  fi
+
+  if [[ "$merge_base" == "$local_sha" ]]; then
+    # Fast-forward available
+    echo "   → pulling ${branch}"
+    run git -C "$target" pull --ff-only --quiet origin "${branch}"
+    (( pulled++ )) || true
+    return
+  fi
+
+  # Diverged
+  echo "   ⚠ WARNING: ${target} has diverged from remote — skipping pull" >&2
+  echo "             Resolve manually: cd ${target} && git status" >&2
+  (( skipped++ )) || true
+}
+
+echo "Registry: ${REGISTRY}"
+echo "Projects: ${PROJECTS_DIR}"
+[[ "$DRY_RUN" == "true" ]] && echo "Mode:     dry-run"
+echo
+
+while IFS= read -r line; do
+  # Strip comments and blank lines
+  line="${line%%#*}"
+  line="${line//[[:space:]]/}"
+  [[ -z "$line" ]] && continue
+
+  sync_repo "$line" || (( errors++ )) || true
+done < "$REGISTRY"
+
+echo
+echo "Done. cloned=${cloned} updated=${pulled} skipped=${skipped} errors=${errors}"
+[[ $errors -eq 0 ]] || exit 1
