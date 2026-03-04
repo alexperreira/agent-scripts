@@ -100,6 +100,7 @@ After making changes:
     - `git commit -m "<scoped message>" -- path/to/file1 path/to/file2`
   - Quote any git paths containing brackets/parentheses so the shell doesn’t treat them as globs/subshells.
 - When running `git rebase`, avoid opening editors: use `GIT_EDITOR=:` and `GIT_SEQUENCE_EDITOR=:` (or `--no-edit`).
+- Never add "Co-Authored-By: Claude" or any AI attribution to commit messages.
 
 ## Git Policy (default for agent work)
 
