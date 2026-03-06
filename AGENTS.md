@@ -72,6 +72,50 @@ After making changes:
 - List files changed.
 - Call out any risks/edge cases.
 
+## Planning & Task Decomposition
+
+When planning product specs, program specs, or multi-step execution:
+
+### Task Files
+
+Create a task file per logical feature branch in `docs/tasks/` (or `/tmp/tasks/`
+for ephemeral work), named `<YYYYMMDD>-<feature-slug>.md`. Each file should include:
+
+- **Goal** — one-sentence objective
+- **Dependencies** — task files that must complete first (list by filename)
+- **Steps** — checkbox list
+- **Parallel-safe notes** — explicitly call out which steps can run concurrently
+- **Outputs** — files/artifacts produced
+
+### Sequencing Rules
+
+- **Sequential** — tasks that share mutable state (same file, schema, config)
+- **Parallel-safe** — tasks on independent files, services, or branches
+- No listed dependency → implicitly parallel-safe with other dependency-free tasks
+
+### Example
+
+```md
+# Feature: <name>
+
+**Goal:** <one sentence>
+**Depends on:** `<other-task>.md` (must complete first)
+
+## Steps
+
+- [ ] Step A — sequential (writes shared config)
+- [ ] Step B — parallel-safe (isolated service)
+- [ ] Step C — sequential after Step A
+
+## Outputs
+- path/to/file1
+```
+
+### Before Executing
+
+Present the full task breakdown (with dependency order) and wait for explicit
+approval before touching any files.
+
 ## Safety & Guardrails (non-negotiable)
 
 - NEVER edit `.env` files or environment-variable files; only the user may change them.
@@ -86,36 +130,95 @@ After making changes:
 - If you detect signs of in-flight work (uncommitted changes, conflicting edits), stop and ask.
 - Moving/renaming/restoring files is allowed when it’s clearly within scope.
 
-## Git Workflow
+## Git Workflow & Policy
 
-- Default to read-only git inspection: `git status`, `git diff`, `git log`.
-- Don’t create/switch branches unless explicitly asked.
-- Don’t commit unless explicitly asked.
-- Don’t push unless explicitly asked.
+### Inspection defaults (all sessions)
+
+- Default to read-only inspection: `git status`, `git diff`, `git log`.
 - Never amend commits without explicit approval.
-- When a commit is requested:
-  - Double-check `git status` before staging/committing.
-  - Stage only files you changed (tracked files only unless user says to add new ones).
-  - Keep commits atomic and list each path explicitly:
-    - `git commit -m "<scoped message>" -- path/to/file1 path/to/file2`
-  - Quote any git paths containing brackets/parentheses so the shell doesn’t treat them as globs/subshells.
-- When running `git rebase`, avoid opening editors: use `GIT_EDITOR=:` and `GIT_SEQUENCE_EDITOR=:` (or `--no-edit`).
 - Never add "Co-Authored-By: Claude" or any AI attribution to commit messages.
+- When running `git rebase`, avoid opening editors: use `GIT_EDITOR=:` and
+  `GIT_SEQUENCE_EDITOR=:` (or `--no-edit`).
 
-## Git Policy (default for agent work)
+### Committing
 
-- Default workflow: create a branch, commit early/often, and push the branch for cross-machine continuity.
-  - Branch naming suggestion: `agent/<repo>/<YYYYMMDD>-<topic>`
-- PRs are recommended by default and required for higher-risk changes:
-  - Required: behavior changes (scripts/automation/generators), dependency/tooling changes, security-sensitive changes, large diffs, or repos with collaborators/branch protections.
-  - Optional: docs-only and small, low-risk changes in personal repos.
-- **Standard PR flow** (when opening a PR):
-  1. Push the branch to remote (`git push -u origin <branch>`)
-  2. Open a PR (`gh pr create ...`)
-  3. Merge the PR (`gh pr merge --squash` or `--merge` as appropriate)
-  4. Delete the remote branch (GitHub does this automatically if configured; otherwise `git push origin --delete <branch>`)
-  5. Delete the local branch (`git branch -d <branch>`)
-- Project-scoped `AGENTS.md` may tighten/override this policy.
+- **Interactive sessions:** don’t commit unless explicitly asked.
+- **Agent work sessions** (feature branch + task plan): commit in logical chunks;
+  committing is implicit to the workflow.
+- Double-check `git status` before staging/committing.
+- Stage only files you changed (tracked files only unless user says to add new ones).
+- Keep commits atomic and list each path explicitly:
+  - `git commit -m "<scoped message>" -- path/to/file1 path/to/file2`
+- Quote any git paths containing brackets/parentheses so the shell doesn’t treat
+  them as globs/subshells.
+
+### Branching & pushing (agent work defaults)
+
+- Default: create a branch via `agent-session` (see ## Agent Session Startup),
+  commit in logical chunks, and push for cross-machine continuity.
+- Don’t create/switch branches or push manually unless `agent-session` is
+  unavailable or `--no-checkout` was used.
+- Branch naming: `agent/<repo>/<YYYYMMDD>-<topic>` (handled automatically by `agent-session`).
+
+### PR policy
+
+PRs are recommended by default and **required** for:
+- Behavior changes (scripts/automation/generators)
+- Dependency or tooling changes
+- Security-sensitive changes
+- Large diffs or repos with collaborators/branch protections
+
+PRs are **optional** for docs-only and small, low-risk changes in personal repos.
+
+### Standard PR flow
+
+1. Push the branch (`git push -u origin <branch>`)
+2. Open a PR (`gh pr create ...`)
+3. Merge (`gh pr merge --squash` or `--merge` as appropriate)
+4. Delete the remote branch (auto if configured; otherwise `git push origin --delete <branch>`)
+5. Delete the local branch (`git branch -d <branch>`)
+
+Project-scoped `AGENTS.md` may tighten or override any of the above.
+
+## Agent Session Startup
+
+Before making any file changes on a branchable task, run `agent-session` to
+create or resume the correct feature branch and capture a local session snapshot.
+
+### When to branch
+
+Use the same criteria as **PR required** in `## Git Workflow & Policy` above.
+Skip branching (`--no-checkout`) for read-only investigation sessions.
+
+### Standard invocation
+
+```bash
+~/scripts/agent-session --topic "<short-topic>" --push
+```
+
+Creates `agent/<repo>/<YYYYMMDD>-<topic-slug>` (or checks it out if it exists),
+saves a snapshot to `~/.local/share/agent-logs/`, and sets upstream.
+
+### Resuming an existing branch
+
+The command is idempotent — existing branch is checked out, not re-created.
+To target a branch explicitly:
+
+```bash
+~/scripts/agent-session --topic "<topic>" --branch "agent/<repo>/<date>-<slug>" --push
+```
+
+### Investigation-only sessions
+
+```bash
+~/scripts/agent-session --topic "<topic>" --no-checkout
+```
+
+### Sequencing with Planning
+
+- Run `agent-session` once per feature branch, not per task step.
+- Parallel-safe tasks on the **same branch** share one session.
+- Tasks on **separate branches** each get their own `agent-session` call.
 
 ## Filesystem Conventions
 
