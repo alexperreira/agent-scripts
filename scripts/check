@@ -62,11 +62,11 @@ expect_fail_contains "missing value for --repo" "${SCRIPT_DIR}/bootstrap-home-li
 
 echo "==> Shellcheck"
 if command -v shellcheck >/dev/null 2>&1; then
-  shellcheck -x "${SCRIPT_DIR}/new-project" \
-    "${SCRIPT_DIR}/agent-session" \
-    "${SCRIPT_DIR}/bootstrap-home-links" \
-    "${SCRIPT_DIR}/check" \
-    "${SCRIPT_DIR}/lib/common.sh"
+  (cd "${SCRIPT_DIR}" && shellcheck -x new-project \
+    agent-session \
+    bootstrap-home-links \
+    check \
+    lib/common.sh)
 else
   if [[ "$REQUIRE_SHELLCHECK" == "true" ]]; then
     die "shellcheck not installed; install it or run without --require-shellcheck"
