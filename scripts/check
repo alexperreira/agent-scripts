@@ -62,7 +62,7 @@ expect_fail_contains "missing value for --repo" "${SCRIPT_DIR}/bootstrap-home-li
 
 echo "==> Shellcheck"
 if command -v shellcheck >/dev/null 2>&1; then
-  shellcheck "${SCRIPT_DIR}/new-project" \
+  shellcheck -x "${SCRIPT_DIR}/new-project" \
     "${SCRIPT_DIR}/agent-session" \
     "${SCRIPT_DIR}/bootstrap-home-links" \
     "${SCRIPT_DIR}/check" \
