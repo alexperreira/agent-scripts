@@ -224,7 +224,9 @@ TEMPLATE_DIR="${SCRIPT_DIR}/../templates/empty"
 
 [[ -d "$TEMPLATE_DIR" ]] || die "missing templates: $TEMPLATE_DIR"
 
-mkdir -p "${TARGET_DIR}/docs"
+mkdir -p "${TARGET_DIR}/docs/active" "${TARGET_DIR}/docs/archive"
+touch "${TARGET_DIR}/docs/active/.gitkeep"
+touch "${TARGET_DIR}/docs/archive/.gitkeep"
 
 if [[ -z "$DESCRIPTION" ]]; then
   DESCRIPTION="New project: ${PROJECT_NAME}"
