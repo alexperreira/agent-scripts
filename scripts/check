@@ -60,6 +60,45 @@ expect_fail_contains "missing value for --owner" "${SCRIPT_DIR}/new-project" --n
 expect_fail_contains "missing value for --remote" "${SCRIPT_DIR}/agent-session" --topic demo --remote
 expect_fail_contains "missing value for --repo" "${SCRIPT_DIR}/bootstrap-home-links" --repo
 
+echo "==> MEASUREMENT.md template render smoke check"
+(
+  export PROJECT_NAME="smoke-test-project"
+  export TECH_STACK="bash, shellcheck"
+  export DESCRIPTION="Smoke test"
+  export AUTHOR="Test Author"
+  export GITHUB_OWNER="testowner"
+  export WEBSITE="test.dev"
+  export YEAR="2026"
+  export DATE_TODAY="2026-01-15"
+
+  TMPL="${SCRIPT_DIR}/../templates/empty/MEASUREMENT.md.tmpl"
+  OUT="/tmp/measurement-smoke-test.md"
+
+  sed \
+    -e "s/{{PROJECT_NAME}}/smoke-test-project/g" \
+    -e "s/{{TECH_STACK}}/bash, shellcheck/g" \
+    -e "s/{{AUTHOR}}/Test Author/g" \
+    -e "s/{{GITHUB_OWNER}}/testowner/g" \
+    -e "s/{{WEBSITE}}/test.dev/g" \
+    -e "s/{{YEAR}}/2026/g" \
+    -e "s/{{DATE_TODAY}}/2026-01-15/g" \
+    -e "s/{{DESCRIPTION}}/Smoke test/g" \
+    "$TMPL" > "$OUT"
+
+  grep -q "smoke-test-project" "$OUT" || { echo "FAIL: PROJECT_NAME not rendered"; exit 1; }
+  grep -q "bash, shellcheck" "$OUT" || { echo "FAIL: TECH_STACK not rendered"; exit 1; }
+  grep -q "2026-01-15" "$OUT" || { echo "FAIL: DATE_TODAY not rendered"; exit 1; }
+  grep -q "testowner" "$OUT" || { echo "FAIL: GITHUB_OWNER not rendered"; exit 1; }
+
+  if grep -qE '\{\{[A-Z_]+\}\}' "$OUT"; then
+    echo "FAIL: un-replaced {{TOKEN}} found in rendered output:"
+    grep -nE '\{\{[A-Z_]+\}\}' "$OUT"
+    exit 1
+  fi
+
+  rm -f "$OUT"
+)
+
 echo "==> Shellcheck"
 if command -v shellcheck >/dev/null 2>&1; then
   (cd "${SCRIPT_DIR}" && shellcheck -x new-project \
