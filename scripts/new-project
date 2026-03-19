@@ -55,6 +55,7 @@ render_template() {
   local esc_author
   local esc_github_owner
   local esc_website
+  local esc_date_today
 
   esc_project_name="$(escape_sed_replacement "$PROJECT_NAME")"
   esc_description="$(escape_sed_replacement "$DESCRIPTION")"
@@ -62,6 +63,7 @@ render_template() {
   esc_author="$(escape_sed_replacement "$AUTHOR")"
   esc_github_owner="$(escape_sed_replacement "$GITHUB_OWNER")"
   esc_website="$(escape_sed_replacement "$WEBSITE")"
+  esc_date_today="$(escape_sed_replacement "$DATE_TODAY")"
 
   local sed_expr=()
   sed_expr+=("-e" "s/{{PROJECT_NAME}}/${esc_project_name}/g")
@@ -71,6 +73,7 @@ render_template() {
   sed_expr+=("-e" "s/{{AUTHOR}}/${esc_author}/g")
   sed_expr+=("-e" "s/{{GITHUB_OWNER}}/${esc_github_owner}/g")
   sed_expr+=("-e" "s/{{WEBSITE}}/${esc_website}/g")
+  sed_expr+=("-e" "s/{{DATE_TODAY}}/${esc_date_today}/g")
 
   sed "${sed_expr[@]}" "$template_path" >"$output_path"
 }
@@ -139,6 +142,7 @@ DRY_RUN="false"
 AUTHOR="Alex Perreira"
 WEBSITE="alexhacks.net"
 YEAR="$(date +%Y)"
+DATE_TODAY="$(date +%Y-%m-%d)"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -198,7 +202,7 @@ echo "License: ${LICENSE_KIND}"
 echo
 
 if [[ "$DRY_RUN" == "true" ]]; then
-  echo "[dry-run] Would create directory and files"
+  echo "[dry-run] Would create directory and files (including docs/MEASUREMENT.md)"
   echo "[dry-run] Would init git + initial commit"
   if [[ "$CREATE_REMOTE" == "true" ]]; then
     echo "[dry-run] Would create GitHub repo via gh + push"
@@ -220,7 +224,9 @@ TEMPLATE_DIR="${SCRIPT_DIR}/../templates/empty"
 
 [[ -d "$TEMPLATE_DIR" ]] || die "missing templates: $TEMPLATE_DIR"
 
-mkdir -p "${TARGET_DIR}/docs"
+mkdir -p "${TARGET_DIR}/docs/active" "${TARGET_DIR}/docs/archive"
+touch "${TARGET_DIR}/docs/active/.gitkeep"
+touch "${TARGET_DIR}/docs/archive/.gitkeep"
 
 if [[ -z "$DESCRIPTION" ]]; then
   DESCRIPTION="New project: ${PROJECT_NAME}"
@@ -230,6 +236,7 @@ render_template "${TEMPLATE_DIR}/README.md.tmpl" "${TARGET_DIR}/README.md"
 render_template "${TEMPLATE_DIR}/gitignore.tmpl" "${TARGET_DIR}/.gitignore"
 render_template "${TEMPLATE_DIR}/AGENTS.md.tmpl" "${TARGET_DIR}/AGENTS.md"
 append_stack_sections "${TARGET_DIR}/AGENTS.md"
+render_template "${TEMPLATE_DIR}/MEASUREMENT.md.tmpl" "${TARGET_DIR}/docs/MEASUREMENT.md"
 ln -s "AGENTS.md" "${TARGET_DIR}/CLAUDE.md"
 
 if [[ "$LICENSE_KIND" == "mit" ]]; then

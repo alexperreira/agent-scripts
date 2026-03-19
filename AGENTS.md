@@ -78,8 +78,9 @@ When planning product specs, program specs, or multi-step execution:
 
 ### Task Files
 
-Create a task file per logical feature branch in `docs/tasks/` (or `/tmp/tasks/`
-for ephemeral work), named `<YYYYMMDD>-<feature-slug>.md`. Each file should include:
+Create a task file per logical feature branch in `docs/active/` (or `/tmp/tasks/`
+for ephemeral work), named `<YYYYMMDD>-<feature-slug>.md`. Move completed task
+docs (or a summarized version) to `docs/archive/`. Each file should include:
 
 - **Goal** — one-sentence objective
 - **Dependencies** — task files that must complete first (list by filename)
