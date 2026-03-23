@@ -29,6 +29,7 @@ Options:
 Examples:
   scripts/new-project --name my-tool --stack "typescript, node, pnpm" --visibility private
   scripts/new-project -n my-lib --stack "python, uv, pytest" --visibility public
+  scripts/new-project -n my-app --stack "expo, react-native" --visibility private
   scripts/new-project -n scratch --no-remote --projects-dir /tmp --dry-run
 EOF
 }
@@ -88,6 +89,34 @@ should_include_python_section() {
   local s
   s="$(echo "${TECH_STACK}" | tr '[:upper:]' '[:lower:]')"
   [[ "$s" == *"py"* || "$s" == *"python"* || "$s" == *"pytest"* || "$s" == *"uv"* || "$s" == *"pip"* ]]
+}
+
+should_include_mobile_section() {
+  local s
+  s="$(echo "${TECH_STACK}" | tr '[:upper:]' '[:lower:]')"
+  [[ "$s" == *"expo"* || "$s" == *"react-native"* || "$s" == *"react native"* || "$s" == *"mobile"* ]]
+}
+
+needs_claude_md() {
+  # Returns true if any stack requires Claude-specific content in CLAUDE.md.
+  # Add new stack checks here as skills are added.
+  should_include_mobile_section
+}
+
+append_claude_sections() {
+  local claude_path="$1"
+
+  if should_include_mobile_section; then
+    cat <<'EOF' >>"$claude_path"
+
+## Mobile App Stack
+This is an Expo/React Native project. Reference these commands when relevant:
+- /expo-project-scaffold — for new project setup
+- /rn-component-patterns — for screen/component architecture
+- /rn-platform-gotchas — for cross-platform issues
+- /expo-build-deploy — for builds, OTA, and store submission
+EOF
+  fi
 }
 
 append_stack_sections() {
@@ -237,7 +266,13 @@ render_template "${TEMPLATE_DIR}/gitignore.tmpl" "${TARGET_DIR}/.gitignore"
 render_template "${TEMPLATE_DIR}/AGENTS.md.tmpl" "${TARGET_DIR}/AGENTS.md"
 append_stack_sections "${TARGET_DIR}/AGENTS.md"
 render_template "${TEMPLATE_DIR}/MEASUREMENT.md.tmpl" "${TARGET_DIR}/docs/MEASUREMENT.md"
-ln -s "AGENTS.md" "${TARGET_DIR}/CLAUDE.md"
+if needs_claude_md; then
+  printf '# CLAUDE.md\n\nSee AGENTS.md in this directory for base instructions. All rules there apply.\n' \
+    >"${TARGET_DIR}/CLAUDE.md"
+  append_claude_sections "${TARGET_DIR}/CLAUDE.md"
+else
+  ln -s "AGENTS.md" "${TARGET_DIR}/CLAUDE.md"
+fi
 
 if [[ "$LICENSE_KIND" == "mit" ]]; then
   render_template "${TEMPLATE_DIR}/LICENSE-MIT.tmpl" "${TARGET_DIR}/LICENSE"
