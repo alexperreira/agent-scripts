@@ -1,10 +1,10 @@
 # agent-scripts
 
-Machine-wide agent workflow for Alex Perreira (WSL-first): rules, scripts, and templates that help Codex work consistently across projects.
+Machine-wide workflow for Alex Perreira (WSL-first): rules, scripts, and templates that help Claude Code work consistently across projects.
 
 ## What this repo provides
 
-- Machine-wide defaults: `AGENTS.md`
+- Machine-wide defaults: `CLAUDE.md`
 - Project generator: `scripts/new-project`
 - Session helper (branch + push + local snapshots): `scripts/agent-session`
 - Bootstrap symlinks into `~`: `scripts/bootstrap-home-links`
@@ -25,8 +25,7 @@ scripts/bootstrap-home-links --apply
 ```
 
 This creates/updates:
-- `~/AGENTS.md` → `~/Projects/agent-scripts/AGENTS.md`
-- `~/CLAUDE.md` → `~/Projects/agent-scripts/AGENTS.md`
+- `~/CLAUDE.md` → `~/Projects/agent-scripts/CLAUDE.md`
 - `~/scripts` → `~/Projects/agent-scripts/scripts`
 - `~/templates` → `~/Projects/agent-scripts/templates`
 

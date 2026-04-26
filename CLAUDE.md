@@ -1,6 +1,6 @@
-# AGENTS.md — Machine-Wide Defaults (Alex Perreira)
+# CLAUDE.md — Machine-Wide Defaults (Alex Perreira)
 
-This file is intended to be reusable across projects. Individual repos can add more-specific `AGENTS.md` files in subdirectories to override/extend these rules.
+This file is intended to be reusable across projects. Individual repos can add more-specific `CLAUDE.md` files in subdirectories to override/extend these rules.
 
 ## Identity
 
@@ -32,13 +32,13 @@ Never access (unless explicitly instructed with clear reason):
 
 ## Orchestration Context
 
-This file lives at the WSL root level (`~/AGENTS.md`) and is primarily used for:
+This file lives at the WSL root level (`~/CLAUDE.md`) and is primarily used for:
 
 - Bootstrapping new projects via `~/scripts/new-project`
 - Cross-project tasks and automation
 - Agent sessions that span multiple repos
 
-When working inside a specific project, defer to that project's `AGENTS.md` if present.
+When working inside a specific project, defer to that project's `CLAUDE.md` if present.
 
 ## Working Style
 
@@ -138,6 +138,7 @@ approval before touching any files.
 - Default to read-only inspection: `git status`, `git diff`, `git log`.
 - Never amend commits without explicit approval.
 - Never add "Co-Authored-By: Claude" or any AI attribution to commit messages.
+- Commit messages should be clean, author-only, and not reference AI tooling.
 - When running `git rebase`, avoid opening editors: use `GIT_EDITOR=:` and
   `GIT_SEQUENCE_EDITOR=:` (or `--no-edit`).
 
@@ -179,7 +180,7 @@ PRs are **optional** for docs-only and small, low-risk changes in personal repos
 4. Delete the remote branch (auto if configured; otherwise `git push origin --delete <branch>`)
 5. Delete the local branch (`git branch -d <branch>`)
 
-Project-scoped `AGENTS.md` may tighten or override any of the above.
+Project-scoped `CLAUDE.md` may tighten or override any of the above.
 
 ## Agent Session Startup
 
@@ -286,21 +287,3 @@ Or with options:
 - Diverged history → skip pull, print warning
 - Non-git directory with same name → skip, print warning
 
-### Slash commands
-
-- Global: `~/.codex/prompts/`
-- Repo-local (optional): `docs/slash-commands/`
-
-# CLAUDE.md — Machine-Wide Defaults
-
-See `AGENTS.md` in this directory for full instructions. All rules there apply.
-
-## Claude-Specific Notes
-
-- Slash commands section does not apply (Codex-specific)
-- For project bootstrapping, use `~/scripts/new-project` as documented
-
-## Commit Message Policy
-
-- Do NOT add a `Co-authored-by: Claude` trailer (or any AI attribution line) to commit messages.
-- Commit messages should be clean, author-only, and not reference AI tooling.
