@@ -1,6 +1,6 @@
-# AGENTS.md — {{PROJECT_NAME}}
+# CLAUDE.md — {{PROJECT_NAME}}
 
-This repo follows Alex Perreira’s machine-wide agent defaults. Additions below are project-scoped.
+This repo follows Alex Perreira’s machine-wide defaults (`~/CLAUDE.md`). Additions below are project-scoped.
 
 ## Project Info
 - Owner: {{AUTHOR}} (`@{{GITHUB_OWNER}}`)
@@ -15,8 +15,25 @@ This repo follows Alex Perreira’s machine-wide agent defaults. Additions below
 - Inherits machine-wide defaults (branch + push for continuity; PR required for higher-risk changes).
 - Add any repo-specific overrides here.
 
+## Architecture (fill in as you go)
+- **Directory layout:**
+- **Key boundaries** (client/server, public/private):
+- **External services/APIs:**
+
+## Environment Variables (fill in)
+
+| Variable | Required | Notes |
+|----------|----------|-------|
+| | | |
+
+Store local values in `.env.local`. Never edit `.env` directly.
+
 ## Invariants (fill in)
 - (Add rules that must not be broken without explicit approval.)
 
 ## Risk Zones (fill in)
 - (List directories/files that require extra care.)
+
+## Task Doc Archiving
+
+When moving a completed task doc from `docs/active/` to `docs/archive/`, add a row to `docs/archive/INDEX.md`. Follow the existing column format and insert newest-first.
