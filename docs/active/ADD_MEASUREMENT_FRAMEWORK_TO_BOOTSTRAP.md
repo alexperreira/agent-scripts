@@ -111,7 +111,7 @@ Add one `render_template` call after the existing renders and before the `git in
 render_template "${TEMPLATE_DIR}/MEASUREMENT.md.tmpl" "${TARGET_DIR}/docs/MEASUREMENT.md"
 ```
 
-Insert this line after line 232 (`append_stack_sections`) and before line 233 (`ln -s "AGENTS.md"`). Exact placement doesn't matter much — just keep it grouped with the other render calls.
+Insert this line after line 232 (`append_stack_sections`) and before line 233 (`append_mobile_section`). Exact placement doesn't matter much — just keep it grouped with the other render calls.
 
 Also update the dry-run output (~line 201) to mention the measurement file is included. This is optional but nice — a one-line echo addition:
 
@@ -180,9 +180,9 @@ echo "==> MEASUREMENT.md template render smoke check"
 ## Out of Scope
 
 - **Do not refactor `render_template()` into a shared library.** The duplication in the smoke test is accepted.
-- **Do not modify any other templates** (`README.md.tmpl`, `AGENTS.md.tmpl`, `gitignore.tmpl`, `LICENSE-MIT.tmpl`).
+- **Do not modify any other templates** (`README.md.tmpl`, `CLAUDE.md.tmpl`, `gitignore.tmpl`, `LICENSE-MIT.tmpl`).
 - **Do not add new CLI flags** (e.g., `--no-measurement`). Every project gets the file. If someone doesn't want it, they can delete it.
-- **Do not add stack-conditional content to MEASUREMENT.md.** Unlike `AGENTS.md` which has Node/Python sections, the measurement framework is stack-agnostic. No `should_include_*` logic.
+- **Do not add stack-conditional content to MEASUREMENT.md.** Unlike `CLAUDE.md` which has Node/Python sections, the measurement framework is stack-agnostic. No `should_include_*` logic.
 - **Do not modify `agent-session`, `sync-projects`, `bootstrap-home-links`, or `setup-claude-mcps`.**
 - **Do not install new packages or dependencies.**
 

@@ -9,10 +9,10 @@ The canonical task doc workflow is: write to `docs/active/`, move to `docs/archi
 
 | Field | Detail |
 |---|---|
-| **Scope** | `AGENTS.md` text update, `new-project` directory scaffolding, template update |
+| **Scope** | `CLAUDE.md` text update, `new-project` directory scaffolding, template update |
 | **Risk** | Low — text/path changes only, no logic changes |
 | **Stack** | Bash, Markdown |
-| **Files affected** | `AGENTS.md` (~2 lines), `new-project` (~1 line), `templates/empty/AGENTS.md.tmpl` (if it references `docs/tasks/`) |
+| **Files affected** | `CLAUDE.md` (~2 lines), `new-project` (~1 line), `templates/empty/CLAUDE.md.tmpl` (if it references `docs/tasks/`) |
 | **Depends on** | None |
 | **Blocks** | Nothing — but should land before next `new-project` run so new repos get the right structure |
 
@@ -24,24 +24,24 @@ Alex's workflow for task documents has evolved:
 - **Active work:** task docs live in `docs/active/`
 - **Completed work:** task docs (or summarized versions) move to `docs/archive/`
 
-The repo still references the old `docs/tasks/` convention in `AGENTS.md`, and `new-project` only scaffolds `docs/` without creating either subdirectory. New projects start without the correct directory structure, and any agent reading `AGENTS.md` will use the stale `docs/tasks/` path.
+The repo still references the old `docs/tasks/` convention in `CLAUDE.md`, and `new-project` only scaffolds `docs/` without creating either subdirectory. New projects start without the correct directory structure, and any agent reading `CLAUDE.md` will use the stale `docs/tasks/` path.
 
 ---
 
 ## Goal
 
 After this change:
-1. `AGENTS.md` references `docs/active/` and `docs/archive/` instead of `docs/tasks/`
+1. `CLAUDE.md` references `docs/active/` and `docs/archive/` instead of `docs/tasks/`
 2. `new-project` creates both `docs/active/` and `docs/archive/` in every new repo
-3. The AGENTS.md template for new projects (`templates/empty/AGENTS.md.tmpl`) references the correct paths so downstream repos inherit the convention
+3. The CLAUDE.md template for new projects (`templates/empty/CLAUDE.md.tmpl`) references the correct paths so downstream repos inherit the convention
 
 ---
 
 ## Tasks
 
-### Task 1 — Update `AGENTS.md` task file path references
+### Task 1 — Update `CLAUDE.md` task file path references
 
-**File:** `AGENTS.md`, Planning & Task Decomposition section
+**File:** `CLAUDE.md`, Planning & Task Decomposition section
 
 Find the line (approximately):
 
@@ -58,9 +58,9 @@ for ephemeral work), named `<YYYYMMDD>-<feature-slug>.md`. Move completed task
 docs (or a summarized version) to `docs/archive/`.
 ```
 
-Scan the rest of `AGENTS.md` for any other occurrences of `docs/tasks/`. Replace each with `docs/active/` as appropriate.
+Scan the rest of `CLAUDE.md` for any other occurrences of `docs/tasks/`. Replace each with `docs/active/` as appropriate.
 
-> **Footgun:** `AGENTS.md` is symlinked to `~/AGENTS.md` and `~/CLAUDE.md` via `bootstrap-home-links`. The symlinks point to the file, not a copy — so editing the source file is sufficient. Do not create separate copies.
+> **Footgun:** `CLAUDE.md` is symlinked to `~/CLAUDE.md` via `bootstrap-home-links`. The symlink points to the file, not a copy — so editing the source file is sufficient. Do not create separate copies.
 
 ---
 
@@ -93,13 +93,13 @@ Insert these two lines immediately after the `mkdir -p` call.
 
 ---
 
-### Task 3 — Update `templates/empty/AGENTS.md.tmpl`
+### Task 3 — Update `templates/empty/CLAUDE.md.tmpl`
 
-**File:** `templates/empty/AGENTS.md.tmpl`
+**File:** `templates/empty/CLAUDE.md.tmpl`
 
 Check whether this template references `docs/tasks/`. If it does, update it to match the same language from Task 1 (`docs/active/`, with the archive note). If the template doesn't mention task file paths, no change needed — just confirm and move on.
 
-> **Footgun:** The template uses `{{VAR}}` tokens. The text being changed here is plain prose, not token values, so no escaping concerns. But verify you're editing the `.tmpl` file, not the rendered `AGENTS.md` in a generated project.
+> **Footgun:** The template uses `{{VAR}}` tokens. The text being changed here is plain prose, not token values, so no escaping concerns. But verify you're editing the `.tmpl` file, not the rendered `CLAUDE.md` in a generated project.
 
 ---
 
@@ -115,12 +115,12 @@ Check whether this template references `docs/tasks/`. If it does, update it to m
 
 ## Acceptance Criteria
 
-- [ ] `AGENTS.md` contains `docs/active/` where it previously said `docs/tasks/`
-- [ ] `AGENTS.md` mentions the `docs/archive/` move-on-completion convention
-- [ ] `AGENTS.md` contains zero remaining references to `docs/tasks/`
+- [ ] `CLAUDE.md` contains `docs/active/` where it previously said `docs/tasks/`
+- [ ] `CLAUDE.md` mentions the `docs/archive/` move-on-completion convention
+- [ ] `CLAUDE.md` contains zero remaining references to `docs/tasks/`
 - [ ] `scripts/new-project --name test-proj --no-remote --projects-dir /tmp` creates `docs/active/` and `docs/archive/` with `.gitkeep` files in each
 - [ ] The initial commit in a new project includes both directories
-- [ ] `templates/empty/AGENTS.md.tmpl` references `docs/active/` (if it previously referenced `docs/tasks/`)
+- [ ] `templates/empty/CLAUDE.md.tmpl` references `docs/active/` (if it previously referenced `docs/tasks/`)
 - [ ] `scripts/check` still passes
 - [ ] Existing scripts (`agent-session`, `sync-projects`, etc.) are unchanged
 
