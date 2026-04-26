@@ -17,7 +17,7 @@ Required:
 
 Options:
   --visibility          private|public (default: private)
-  --stack               Free-form tech stack string used to seed AGENTS.md
+  --stack               Free-form tech stack string used to seed CLAUDE.md
   --description         Short description for README (optional)
   --projects-dir        Base directory (default: $HOME/Projects)
   --license             mit|none (default: mit)
@@ -97,19 +97,14 @@ should_include_mobile_section() {
   [[ "$s" == *"expo"* || "$s" == *"react-native"* || "$s" == *"react native"* || "$s" == *"mobile"* ]]
 }
 
-needs_claude_md() {
-  # Returns true if any stack requires Claude-specific content in CLAUDE.md.
-  # Add new stack checks here as skills are added.
-  should_include_mobile_section
-}
-
-append_claude_sections() {
+append_mobile_section() {
   local claude_path="$1"
 
   if should_include_mobile_section; then
     cat <<'EOF' >>"$claude_path"
 
 ## Mobile App Stack
+
 This is an Expo/React Native project. Reference these commands when relevant:
 - /expo-project-scaffold — for new project setup
 - /rn-component-patterns — for screen/component architecture
@@ -120,42 +115,46 @@ EOF
 }
 
 append_stack_sections() {
-  local agents_path="$1"
+  local claude_path="$1"
 
   {
     echo
-    echo "## Repo Quickstart (fill in as you go)"
+    echo "## Commands (fill in as you go)"
     echo
+    echo '```bash'
     if should_include_node_section; then
       cat <<'EOF'
-### Node / TypeScript (suggested)
-- Install: `pnpm install` (or `npm install`)
-- Lint: `pnpm lint`
-- Test: `npm test` or `pnpm test`
-- Typecheck: `pnpm typecheck`
-- Dev: `pnpm dev`
+# Development
+pnpm install                # Install dependencies
+pnpm dev                    # Start dev server
+pnpm build                  # Production build
+
+# Quality
+pnpm lint                   # Lint
+pnpm typecheck              # TypeScript check (no emit)
+pnpm test                   # Run tests
 EOF
-      echo
     fi
 
     if should_include_python_section; then
       cat <<'EOF'
-### Python (suggested)
-- Create venv: `python -m venv .venv`
-- Activate: `source .venv/bin/activate`
-- Install: `pip install -r requirements.txt` (or `uv sync` if using uv)
-- Lint: `ruff check .` (or your tool)
-- Test: `pytest -q`
-EOF
-      echo
-    fi
+# Setup
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt   # or: uv sync
 
+# Quality
+ruff check .                # Lint
+pytest -q                   # Run tests
+EOF
+    fi
+    echo '```'
+    echo
     cat <<'EOF'
 ### Notes
 - Prefer keeping the repo on the WSL filesystem (not under `/mnt/c`) for performance.
-- Update this file with concrete commands once the stack stabilizes.
+- Update commands above with concrete values once the stack stabilizes.
 EOF
-  } >>"$agents_path"
+  } >>"$claude_path"
 }
 
 PROJECT_NAME=""
@@ -263,16 +262,10 @@ fi
 
 render_template "${TEMPLATE_DIR}/README.md.tmpl" "${TARGET_DIR}/README.md"
 render_template "${TEMPLATE_DIR}/gitignore.tmpl" "${TARGET_DIR}/.gitignore"
-render_template "${TEMPLATE_DIR}/AGENTS.md.tmpl" "${TARGET_DIR}/AGENTS.md"
-append_stack_sections "${TARGET_DIR}/AGENTS.md"
+render_template "${TEMPLATE_DIR}/CLAUDE.md.tmpl" "${TARGET_DIR}/CLAUDE.md"
+append_stack_sections "${TARGET_DIR}/CLAUDE.md"
+append_mobile_section "${TARGET_DIR}/CLAUDE.md"
 render_template "${TEMPLATE_DIR}/MEASUREMENT.md.tmpl" "${TARGET_DIR}/docs/MEASUREMENT.md"
-if needs_claude_md; then
-  printf '# CLAUDE.md\n\nSee AGENTS.md in this directory for base instructions. All rules there apply.\n' \
-    >"${TARGET_DIR}/CLAUDE.md"
-  append_claude_sections "${TARGET_DIR}/CLAUDE.md"
-else
-  ln -s "AGENTS.md" "${TARGET_DIR}/CLAUDE.md"
-fi
 
 if [[ "$LICENSE_KIND" == "mit" ]]; then
   render_template "${TEMPLATE_DIR}/LICENSE-MIT.tmpl" "${TARGET_DIR}/LICENSE"
