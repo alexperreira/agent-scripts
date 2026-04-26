@@ -60,6 +60,9 @@ expect_fail_contains "missing value for --owner" "${SCRIPT_DIR}/new-project" --n
 expect_fail_contains "missing value for --remote" "${SCRIPT_DIR}/agent-session" --topic demo --remote
 expect_fail_contains "missing value for --repo" "${SCRIPT_DIR}/bootstrap-home-links" --repo
 
+echo "==> new-project dry-run smoke check (no --stack)"
+"${SCRIPT_DIR}/new-project" --name smoke-test-project --no-remote --dry-run >/dev/null
+
 echo "==> MEASUREMENT.md template render smoke check"
 (
   export PROJECT_NAME="smoke-test-project"
