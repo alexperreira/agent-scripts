@@ -230,7 +230,9 @@ render_template "${TEMPLATE_DIR}/README.md.tmpl" "${TARGET_DIR}/README.md"
 render_template "${TEMPLATE_DIR}/gitignore.tmpl" "${TARGET_DIR}/.gitignore"
 render_template "${TEMPLATE_DIR}/AGENTS.md.tmpl" "${TARGET_DIR}/AGENTS.md"
 append_stack_sections "${TARGET_DIR}/AGENTS.md"
-ln -s "AGENTS.md" "${TARGET_DIR}/CLAUDE.md"
+# A real file importing @AGENTS.md, not a symlink: Claude Code does not read
+# AGENTS.md natively, and symlinks need Developer Mode on the Windows side.
+render_template "${TEMPLATE_DIR}/CLAUDE.md.tmpl" "${TARGET_DIR}/CLAUDE.md"
 
 if [[ "$LICENSE_KIND" == "mit" ]]; then
   render_template "${TEMPLATE_DIR}/LICENSE-MIT.tmpl" "${TARGET_DIR}/LICENSE"
