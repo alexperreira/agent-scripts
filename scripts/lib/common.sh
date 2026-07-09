@@ -5,6 +5,10 @@ die() {
   exit 1
 }
 
+warn() {
+  echo "warning: $*" >&2
+}
+
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
 }
