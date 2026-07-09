@@ -255,6 +255,9 @@ To target a branch explicitly:
 - Bootstrap symlinks: `~/scripts/bootstrap-home-links --apply`
 - Project registry: `~/Projects/agent-scripts/current-projects`
 - Project sync: `~/scripts/sync-projects`
+- MCP registration: `~/scripts/setup-claude-mcps`
+- Shared skills: `~/Projects/agent-scripts/plugins/alex-workflow/skills/`
+- Secrets: `~/.secrets` (mode `600`; never committed, never read by agents)
 
 ## Current Projects
 
@@ -285,19 +288,44 @@ Or with options:
 - Diverged history → skip pull, print warning
 - Non-git directory with same name → skip, print warning
 
-### Slash commands
+## Skills & Plugins
 
-- Global: `~/.codex/prompts/`
-- Repo-local (optional): `docs/slash-commands/`
+Claude Code and Codex both load Agent Skills: a directory containing a
+`SKILL.md` with YAML frontmatter (`name`, `description`). The description is
+what the model matches on, so write it as a trigger, not a summary.
 
-# CLAUDE.md — Machine-Wide Defaults
+Machine-wide skills live in **one** place and are shared by both agents:
 
-See `AGENTS.md` in this directory for full instructions. All rules there apply.
+```
+~/Projects/agent-scripts/plugins/alex-workflow/skills/<name>/SKILL.md
+```
 
-## Claude-Specific Notes
+**Claude Code** loads them as a plugin. Skills are namespaced `alex-workflow:<name>`:
 
-- Slash commands section does not apply (Codex-specific)
-- For project bootstrapping, use `~/scripts/new-project` as documented
+```
+/plugin marketplace add ~/Projects/agent-scripts
+/plugin install alex-workflow@agent-scripts
+```
+
+**Codex** has no plugin system, so `~/scripts/bootstrap-home-links --apply`
+symlinks each skill into `~/.codex/skills/<name>`. It links per-skill and never
+replaces the directory, which also holds Codex's bundled skills.
+
+**Project-scoped skills** go in `.claude/skills/<name>/SKILL.md` inside the repo
+they serve.
+
+Custom slash commands (`.claude/commands/*.md`) still work, but new workflows
+should be skills — they support supporting files, tool restrictions, and
+model-initiated invocation.
+
+## Secrets
+
+- API keys live only in `~/.secrets` (mode `600`), never in a repo and never in
+  an agent config file.
+- MCP servers that need a key are registered as a `bash -c` wrapper that sources
+  `~/.secrets` at spawn time. See `~/scripts/setup-claude-mcps`.
+- If a key ever lands in `~/.claude.json` or `~/.codex/config.toml`, treat it as
+  compromised: rotate it, then re-run `setup-claude-mcps --replace`.
 
 ## Commit Message Policy
 
