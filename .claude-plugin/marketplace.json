@@ -1,0 +1,17 @@
+{
+  "name": "agent-scripts",
+  "owner": {
+    "name": "Alex Perreira"
+  },
+  "metadata": {
+    "description": "Alex Perreira's machine-wide agent workflow tooling.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "alex-workflow",
+      "source": "./plugins/alex-workflow",
+      "description": "Project scaffolding, agent work sessions, and multi-repo sync for a WSL-first setup."
+    }
+  ]
+}

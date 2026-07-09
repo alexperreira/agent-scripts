@@ -1,0 +1,8 @@
+{
+  "name": "alex-workflow",
+  "description": "Project scaffolding, agent work sessions, and multi-repo sync for a WSL-first setup.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Alex Perreira"
+  }
+}
