@@ -10,25 +10,31 @@ usage() {
 bootstrap-home-links — ensure home-level symlinks point to this repo
 
 Creates/updates:
-  ~/AGENTS.md   -> <this-repo>/AGENTS.md
-  ~/CLAUDE.md   -> <this-repo>/AGENTS.md
-  ~/scripts     -> <this-repo>/scripts
-  ~/templates   -> <this-repo>/templates
+  ~/AGENTS.md            -> <this-repo>/AGENTS.md
+  ~/CLAUDE.md            -> <this-repo>/AGENTS.md
+  ~/scripts              -> <this-repo>/scripts
+  ~/templates            -> <this-repo>/templates
+  ~/.codex/skills/<name> -> <this-repo>/plugins/alex-workflow/skills/<name>
+
+Claude Code loads the same skills as a plugin rather than by symlink; the
+install command is printed at the end of every run.
 
 Default mode is dry-run. Use --apply to make changes.
 
 Usage:
-  scripts/bootstrap-home-links [--apply] [--repo <path>] [--help]
+  scripts/bootstrap-home-links [--apply] [--repo <path>] [--no-codex-skills] [--help]
 
 Options:
-  --apply          Perform changes (otherwise prints intended actions only)
-  --repo           Repo root (default: auto-detect from this script path)
-  --help, -h       Show this help
+  --apply             Perform changes (otherwise prints intended actions only)
+  --repo              Repo root (default: auto-detect from this script path)
+  --no-codex-skills   Skip linking skills into ~/.codex/skills
+  --help, -h          Show this help
 EOF
 }
 
 REPO_ROOT=""
 DO_APPLY="false"
+DO_CODEX_SKILLS="true"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -37,6 +43,8 @@ while [[ $# -gt 0 ]]; do
     --repo)
       require_arg_value "$1" "${2:-}"
       REPO_ROOT="${2:-}"; shift 2 ;;
+    --no-codex-skills)
+      DO_CODEX_SKILLS="false"; shift ;;
     --help|-h)
       usage; exit 0 ;;
     *)
@@ -54,22 +62,22 @@ fi
 [[ -d "${REPO_ROOT}/scripts" ]] || die "missing ${REPO_ROOT}/scripts"
 [[ -d "${REPO_ROOT}/templates" ]] || die "missing ${REPO_ROOT}/templates"
 
-declare -a links=(
-  "${HOME}/AGENTS.md|${REPO_ROOT}/AGENTS.md"
-  "${HOME}/CLAUDE.md|${REPO_ROOT}/AGENTS.md"
-  "${HOME}/scripts|${REPO_ROOT}/scripts"
-  "${HOME}/templates|${REPO_ROOT}/templates"
-)
-
-for spec in "${links[@]}"; do
-  target="${spec%%|*}"
-  source="${spec##*|}"
+# link_one <source> <target> — never clobbers a real file or directory.
+link_one() {
+  local source="$1"
+  local target="$2"
+  local resolved_source
+  resolved_source="$(readlink -f "$source" || true)"
 
   if [[ -L "$target" ]]; then
+    local current
     current="$(readlink -f "$target" || true)"
-    if [[ "$current" == "$source" ]]; then
+    # Both sides are fully resolved before comparing. Comparing a resolved
+    # target against an unresolved source reports a false "would update"
+    # whenever the repo path itself traverses a symlink.
+    if [[ -n "$resolved_source" && "$current" == "$resolved_source" ]]; then
       echo "ok: $target -> $source"
-      continue
+      return
     fi
     if [[ "$DO_APPLY" == "true" ]]; then
       ln -sfn "$source" "$target"
@@ -77,13 +85,13 @@ for spec in "${links[@]}"; do
     else
       echo "would update: $target -> $source (currently -> $current)"
     fi
-    continue
+    return
   fi
 
   if [[ -e "$target" ]]; then
     echo "skip: $target exists and is not a symlink"
     echo "      move it aside manually if you want this script to manage it"
-    continue
+    return
   fi
 
   if [[ "$DO_APPLY" == "true" ]]; then
@@ -92,4 +100,56 @@ for spec in "${links[@]}"; do
   else
     echo "would create: $target -> $source"
   fi
+}
+
+declare -a links=(
+  "${HOME}/AGENTS.md|${REPO_ROOT}/AGENTS.md"
+  "${HOME}/CLAUDE.md|${REPO_ROOT}/AGENTS.md"
+  "${HOME}/scripts|${REPO_ROOT}/scripts"
+  "${HOME}/templates|${REPO_ROOT}/templates"
+)
+
+for spec in "${links[@]}"; do
+  link_one "${spec##*|}" "${spec%%|*}"
 done
+
+# ── Codex skills ───────────────────────────────────────────────────────────────
+# Codex has no plugin system, so each skill is linked individually. The skills
+# directory is never replaced wholesale — it also holds Codex's bundled skills.
+SKILLS_SRC="${REPO_ROOT}/plugins/alex-workflow/skills"
+
+if [[ "$DO_CODEX_SKILLS" == "true" ]]; then
+  if [[ ! -d "$SKILLS_SRC" ]]; then
+    warn "no skills directory at ${SKILLS_SRC}; skipping Codex skill links"
+  elif [[ ! -d "${HOME}/.codex" ]]; then
+    echo "skip: ~/.codex not found; Codex not installed?"
+  else
+    CODEX_SKILLS="${HOME}/.codex/skills"
+    if [[ ! -d "$CODEX_SKILLS" ]]; then
+      if [[ "$DO_APPLY" == "true" ]]; then
+        mkdir -p "$CODEX_SKILLS"
+        echo "created: $CODEX_SKILLS"
+      else
+        echo "would create: $CODEX_SKILLS"
+      fi
+    fi
+
+    for skill_dir in "${SKILLS_SRC}"/*/; do
+      [[ -d "$skill_dir" ]] || continue
+      skill_name="$(basename "$skill_dir")"
+      link_one "${SKILLS_SRC}/${skill_name}" "${CODEX_SKILLS}/${skill_name}"
+    done
+  fi
+fi
+
+if [[ "$DO_APPLY" != "true" ]]; then
+  echo
+  echo "(dry-run; re-run with --apply to make these changes)"
+fi
+
+cat <<EOF
+
+Claude Code loads these skills as a plugin, not via symlink:
+  /plugin marketplace add ${REPO_ROOT}
+  /plugin install alex-workflow@agent-scripts
+EOF
