@@ -2,12 +2,16 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 # shellcheck source=lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
 
 usage() {
   cat <<'EOF'
 check — run lightweight local quality checks for agent-scripts
+
+Scripts are discovered by shebang rather than listed, so a new script under
+scripts/ is covered automatically.
 
 Usage:
   scripts/check [--require-shellcheck] [--help]
@@ -43,39 +47,49 @@ expect_fail_contains() {
   [[ "$output" == *"$needle"* ]] || die "unexpected error output for: $*"
 }
 
+# ── Discover every bash script under scripts/ ──────────────────────────────────
+declare -a BASH_FILES=()
+while IFS= read -r -d '' file; do
+  if head -n 1 "$file" | grep -q '^#!.*bash'; then
+    BASH_FILES+=("$file")
+  fi
+done < <(find "$SCRIPT_DIR" -type f -print0 | sort -z)
+
+[[ ${#BASH_FILES[@]} -gt 0 ]] || die "no bash scripts discovered under ${SCRIPT_DIR}"
+
+echo "==> Discovered ${#BASH_FILES[@]} bash file(s)"
+for file in "${BASH_FILES[@]}"; do
+  echo "    ${file#"${REPO_ROOT}"/}"
+done
+
 echo "==> Syntax checks (bash -n)"
-bash -n "${SCRIPT_DIR}/new-project"
-bash -n "${SCRIPT_DIR}/agent-session"
-bash -n "${SCRIPT_DIR}/bootstrap-home-links"
-bash -n "${SCRIPT_DIR}/lib/common.sh"
+for file in "${BASH_FILES[@]}"; do
+  bash -n "$file"
+done
 
 echo "==> CLI help smoke checks"
-"${SCRIPT_DIR}/new-project" --help >/dev/null
-"${SCRIPT_DIR}/agent-session" --help >/dev/null
-"${SCRIPT_DIR}/bootstrap-home-links" --help >/dev/null
-"${SCRIPT_DIR}/check" --help >/dev/null
+for file in "${BASH_FILES[@]}"; do
+  # Library files are sourced, not invoked.
+  [[ "$file" == "${SCRIPT_DIR}/lib/"* ]] && continue
+  [[ -x "$file" ]] || die "not executable: ${file#"${REPO_ROOT}"/}"
+  "$file" --help >/dev/null || die "--help failed: ${file#"${REPO_ROOT}"/}"
+done
 
 echo "==> Argument guard smoke checks"
 expect_fail_contains "missing value for --owner" "${SCRIPT_DIR}/new-project" --name demo --owner --dry-run
 expect_fail_contains "missing value for --remote" "${SCRIPT_DIR}/agent-session" --topic demo --remote
 expect_fail_contains "missing value for --repo" "${SCRIPT_DIR}/bootstrap-home-links" --repo
+expect_fail_contains "missing value for --registry" "${SCRIPT_DIR}/sync-projects" --registry
+expect_fail_contains "unknown option: --nope" "${SCRIPT_DIR}/setup-claude-mcps" --nope
 
 echo "==> new-project dry-run smoke check (no --stack)"
 "${SCRIPT_DIR}/new-project" --name smoke-test-project --no-remote --dry-run >/dev/null
 
 echo "==> MEASUREMENT.md template render smoke check"
 (
-  export PROJECT_NAME="smoke-test-project"
-  export TECH_STACK="bash, shellcheck"
-  export DESCRIPTION="Smoke test"
-  export AUTHOR="Test Author"
-  export GITHUB_OWNER="testowner"
-  export WEBSITE="test.dev"
-  export YEAR="2026"
-  export DATE_TODAY="2026-01-15"
-
-  TMPL="${SCRIPT_DIR}/../templates/empty/MEASUREMENT.md.tmpl"
-  OUT="/tmp/measurement-smoke-test.md"
+  TMPL="${REPO_ROOT}/templates/empty/MEASUREMENT.md.tmpl"
+  OUT="$(mktemp)"
+  trap 'rm -f "$OUT"' EXIT
 
   sed \
     -e "s/{{PROJECT_NAME}}/smoke-test-project/g" \
@@ -88,27 +102,68 @@ echo "==> MEASUREMENT.md template render smoke check"
     -e "s/{{DESCRIPTION}}/Smoke test/g" \
     "$TMPL" > "$OUT"
 
-  grep -q "smoke-test-project" "$OUT" || { echo "FAIL: PROJECT_NAME not rendered"; exit 1; }
-  grep -q "bash, shellcheck" "$OUT" || { echo "FAIL: TECH_STACK not rendered"; exit 1; }
-  grep -q "2026-01-15" "$OUT" || { echo "FAIL: DATE_TODAY not rendered"; exit 1; }
-  grep -q "testowner" "$OUT" || { echo "FAIL: GITHUB_OWNER not rendered"; exit 1; }
+  grep -q "smoke-test-project" "$OUT" || die "MEASUREMENT: PROJECT_NAME not rendered"
+  grep -q "bash, shellcheck" "$OUT" || die "MEASUREMENT: TECH_STACK not rendered"
+  grep -q "2026-01-15" "$OUT" || die "MEASUREMENT: DATE_TODAY not rendered"
+  grep -q "testowner" "$OUT" || die "MEASUREMENT: GITHUB_OWNER not rendered"
 
   if grep -qE '\{\{[A-Z_]+\}\}' "$OUT"; then
-    echo "FAIL: un-replaced {{TOKEN}} found in rendered output:"
-    grep -nE '\{\{[A-Z_]+\}\}' "$OUT"
-    exit 1
+    echo "un-replaced {{TOKEN}} found in rendered output:" >&2
+    grep -nE '\{\{[A-Z_]+\}\}' "$OUT" >&2
+    die "MEASUREMENT: template not fully rendered"
   fi
-
-  rm -f "$OUT"
 )
+
+echo "==> Plugin + skill manifests"
+MARKETPLACE="${REPO_ROOT}/.claude-plugin/marketplace.json"
+PLUGIN="${REPO_ROOT}/.claude-plugin/plugin.json"
+[[ -f "$MARKETPLACE" ]] || die "missing ${MARKETPLACE}"
+[[ -f "$PLUGIN" ]] || die "missing ${PLUGIN}"
+
+if command -v python3 >/dev/null 2>&1; then
+  python3 -m json.tool "$MARKETPLACE" >/dev/null || die "invalid JSON: ${MARKETPLACE}"
+  python3 -m json.tool "$PLUGIN" >/dev/null || die "invalid JSON: ${PLUGIN}"
+else
+  echo "note: python3 not installed; skipping JSON parse"
+fi
+
+# Every SKILL.md needs YAML frontmatter whose `name` matches its directory,
+# because that name is what the plugin loader namespaces and exposes.
+skill_count=0
+while IFS= read -r -d '' skill; do
+  skill_dir="$(basename "$(dirname "$skill")")"
+  rel="${skill#"${REPO_ROOT}"/}"
+
+  [[ "$(head -n 1 "$skill")" == "---" ]] || die "missing frontmatter: ${rel}"
+
+  frontmatter="$(awk 'NR>1 && /^---[[:space:]]*$/{exit} NR>1' "$skill")"
+  name="$(printf '%s\n' "$frontmatter" | sed -n 's/^name:[[:space:]]*//p' | head -n 1)"
+
+  [[ -n "$name" ]] || die "frontmatter missing 'name': ${rel}"
+  printf '%s\n' "$frontmatter" | grep -q '^description:' || die "frontmatter missing 'description': ${rel}"
+  [[ "$name" == "$skill_dir" ]] || die "frontmatter name '${name}' != directory '${skill_dir}': ${rel}"
+
+  skill_count=$((skill_count + 1))
+done < <(find "${REPO_ROOT}/skills" -name SKILL.md -print0 2>/dev/null | sort -z)
+
+[[ $skill_count -gt 0 ]] || die "no SKILL.md files found under ${REPO_ROOT}/skills"
+echo "    ${skill_count} skill(s) validated"
+
+if command -v claude >/dev/null 2>&1; then
+  claude plugin validate "$REPO_ROOT" >/dev/null || die "claude plugin validate failed"
+  echo "    claude plugin validate: ok"
+else
+  echo "note: claude not installed; skipping plugin validate"
+fi
 
 echo "==> Shellcheck"
 if command -v shellcheck >/dev/null 2>&1; then
-  (cd "${SCRIPT_DIR}" && shellcheck -x new-project \
-    agent-session \
-    bootstrap-home-links \
-    check \
-    lib/common.sh)
+  declare -a RELATIVE=()
+  for file in "${BASH_FILES[@]}"; do
+    RELATIVE+=("${file#"${SCRIPT_DIR}"/}")
+  done
+  # Run from SCRIPT_DIR so `# shellcheck source=lib/common.sh` resolves.
+  (cd "${SCRIPT_DIR}" && shellcheck -x "${RELATIVE[@]}")
 else
   if [[ "$REQUIRE_SHELLCHECK" == "true" ]]; then
     die "shellcheck not installed; install it or run without --require-shellcheck"

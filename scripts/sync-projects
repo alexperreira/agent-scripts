@@ -64,6 +64,7 @@ require_cmd git
 # Counters
 cloned=0
 pulled=0
+uptodate=0
 skipped=0
 errors=0
 
@@ -140,7 +141,7 @@ sync_repo() {
 
   if [[ "$local_sha" == "$remote_sha" ]]; then
     echo "   ✓ already up to date"
-    (( pulled++ )) || true
+    (( uptodate++ )) || true
     return
   fi
 
@@ -183,5 +184,5 @@ while IFS= read -r line; do
 done < "$REGISTRY"
 
 echo
-echo "Done. cloned=${cloned} updated=${pulled} skipped=${skipped} errors=${errors}"
+echo "Done. cloned=${cloned} updated=${pulled} up-to-date=${uptodate} skipped=${skipped} errors=${errors}"
 [[ $errors -eq 0 ]] || exit 1

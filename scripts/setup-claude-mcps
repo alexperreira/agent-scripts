@@ -11,8 +11,10 @@ usage() {
   cat <<'EOF'
 setup-claude-mcps — register global MCP servers for Claude Code and/or Codex
 
-Reads API keys from ~/.secrets. Run once per machine after initial setup
-or whenever MCP servers need to be re-registered.
+Secrets are never written into agent config files. Servers that need a key are
+registered as a `bash -c` wrapper that sources ~/.secrets at spawn time, so the
+key lives in exactly one place on disk (~/.secrets) and only ever enters the
+environment of the server process itself.
 
 Usage:
   setup-claude-mcps [options]
@@ -20,10 +22,12 @@ Usage:
 Options:
   --claude-only  Register servers for Claude Code only
   --codex-only   Register servers for Codex only
+  --replace      Remove an existing server before re-adding it
+                 (use this to migrate off previously stored plaintext keys)
   --dry-run      Print commands without executing them
   -h, --help     Show this help message
 
-Required keys in ~/.secrets:
+Required keys in ~/.secrets (KEY=value, one per line):
   GITHUB_PAT       GitHub personal access token (scopes: repo, read:org, read:user)
   BRAVE_API_KEY    Brave Search API key (api.search.brave.com)
 
@@ -35,11 +39,13 @@ EOF
 DRY_RUN=false
 DO_CLAUDE=true
 DO_CODEX=true
+REPLACE=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --claude-only) DO_CODEX=false; shift ;;
     --codex-only)  DO_CLAUDE=false; shift ;;
+    --replace)     REPLACE=true; shift ;;
     --dry-run)     DRY_RUN=true; shift ;;
     -h|--help)     usage; exit 0 ;;
     *) die "unknown option: $1" ;;
@@ -52,46 +58,106 @@ run() {
   else
     "$@" || {
       local exit_code=$?
-      # "already exists" errors are not fatal — skip gracefully
-      echo "  skipped (already registered or error $exit_code)"
+      echo "  skipped (already registered or error ${exit_code}); re-run with --replace to overwrite"
     }
   fi
 }
 
-# Load secrets
-if [[ -f "$SECRETS_FILE" ]]; then
-  # shellcheck source=/dev/null
-  source "$SECRETS_FILE"
-else
-  die "~/.secrets not found. Create it with GITHUB_PAT and BRAVE_API_KEY defined."
+# Build a shell snippet that loads ~/.secrets, then execs the real server.
+# Only `$VAR` (unbraced) is used for secret names: Claude Code expands `${VAR}`
+# inside stored args, and we want bash — not Claude — to do the expansion.
+build_wrapper() {
+  local prelude="$1"; shift
+  local cmd="" word
+  for word in "$@"; do
+    cmd+="$(printf '%q ' "$word")"
+  done
+  printf 'set -a; . %q; set +a; %sexec %s' "$SECRETS_FILE" "$prelude" "$cmd"
+}
+
+claude_add() {
+  local name="$1"; shift
+  if [[ "$REPLACE" == true ]]; then
+    run claude mcp remove -s user "$name"
+  fi
+  run claude mcp add -s user "$name" "$@"
+}
+
+codex_add() {
+  local name="$1"; shift
+  if [[ "$REPLACE" == true ]]; then
+    run codex mcp remove "$name"
+  fi
+  run codex mcp add "$name" "$@"
+}
+
+# Warn if any previously stored plaintext key is still sitting in a config file.
+warn_plaintext_leftovers() {
+  local file secret found=false
+  for file in "${HOME}/.claude.json" "${HOME}/.codex/config.toml"; do
+    [[ -f "$file" ]] || continue
+    for secret in "${GITHUB_PAT:-}" "${BRAVE_API_KEY:-}"; do
+      [[ -n "$secret" ]] || continue
+      if grep -qF -- "$secret" "$file" 2>/dev/null; then
+        echo "  ! ${file} still contains a plaintext secret" >&2
+        found=true
+        break
+      fi
+    done
+  done
+
+  if [[ "$found" == true ]]; then
+    echo >&2
+    warn "those keys are exposed on disk — rotate them, update ~/.secrets,"
+    warn "then re-run: setup-claude-mcps --replace"
+  fi
+}
+
+[[ -f "$SECRETS_FILE" ]] || die "${SECRETS_FILE} not found. Create it with GITHUB_PAT and BRAVE_API_KEY defined."
+
+SECRETS_MODE="$(stat -c '%a' "$SECRETS_FILE" 2>/dev/null || echo '???')"
+if [[ "$SECRETS_MODE" != "600" ]]; then
+  warn "${SECRETS_FILE} is mode ${SECRETS_MODE}; it holds live credentials."
+  warn "tighten it with: chmod 600 ${SECRETS_FILE}"
 fi
+
+# Sourced only to validate presence; values are never passed to the CLIs.
+# shellcheck source=/dev/null
+source "$SECRETS_FILE"
+
+[[ -n "${GITHUB_PAT:-}" ]]     || die "GITHUB_PAT is not set in ${SECRETS_FILE}"
+[[ -n "${BRAVE_API_KEY:-}" ]]  || die "BRAVE_API_KEY is not set in ${SECRETS_FILE}"
 
 require_cmd npx
 require_cmd uvx
 
-[[ -n "${GITHUB_PAT:-}" ]]     || die "GITHUB_PAT is not set in ${SECRETS_FILE}"
-[[ -n "${BRAVE_API_KEY:-}" ]]  || die "BRAVE_API_KEY is not set in ${SECRETS_FILE}"
+# SC2016: `$GITHUB_PAT` must stay literal. It is expanded by the wrapper's own
+# bash at spawn time, after ~/.secrets is sourced — not by this script, which
+# would defeat the point by baking the token into the stored command.
+# shellcheck disable=SC2016
+GITHUB_WRAPPER="$(build_wrapper 'export GITHUB_PERSONAL_ACCESS_TOKEN="$GITHUB_PAT"; ' \
+  npx -y @modelcontextprotocol/server-github)"
+BRAVE_WRAPPER="$(build_wrapper '' \
+  npx -y @modelcontextprotocol/server-brave-search)"
 
 # ── Claude Code ────────────────────────────────────────────────────────────────
 if [[ "$DO_CLAUDE" == true ]]; then
   require_cmd claude
   echo "Registering MCP servers for Claude Code..."
 
-  run claude mcp add -s user sequential-thinking \
+  claude_add sequential-thinking \
     -- npx -y @modelcontextprotocol/server-sequential-thinking
 
-  run claude mcp add -s user fetch \
+  claude_add fetch \
     -- uvx mcp-server-fetch
 
-  run claude mcp add -s user github \
-    -e GITHUB_PERSONAL_ACCESS_TOKEN="${GITHUB_PAT}" \
-    -- npx -y @modelcontextprotocol/server-github
+  claude_add github \
+    -- bash -c "$GITHUB_WRAPPER"
 
-  run claude mcp add -s user brave-search \
-    -e BRAVE_API_KEY="${BRAVE_API_KEY}" \
-    -- npx -y @modelcontextprotocol/server-brave-search
+  claude_add brave-search \
+    -- bash -c "$BRAVE_WRAPPER"
 
-  run claude mcp add -s user context7 \
+  claude_add context7 \
     -- npx -y @upstash/context7-mcp
 
   echo "Claude Code: done."
@@ -102,25 +168,28 @@ if [[ "$DO_CODEX" == true ]]; then
   require_cmd codex
   echo "Registering MCP servers for Codex..."
 
-  run codex mcp add sequential-thinking \
+  codex_add sequential-thinking \
     -- npx -y @modelcontextprotocol/server-sequential-thinking
 
-  run codex mcp add fetch \
+  codex_add fetch \
     -- uvx mcp-server-fetch
 
-  run codex mcp add github \
-    --env GITHUB_PERSONAL_ACCESS_TOKEN="${GITHUB_PAT}" \
-    -- npx -y @modelcontextprotocol/server-github
+  codex_add github \
+    -- bash -c "$GITHUB_WRAPPER"
 
-  run codex mcp add brave-search \
-    --env BRAVE_API_KEY="${BRAVE_API_KEY}" \
-    -- npx -y @modelcontextprotocol/server-brave-search
+  codex_add brave-search \
+    -- bash -c "$BRAVE_WRAPPER"
 
   # context7 uses its hosted HTTP endpoint in Codex
-  run codex mcp add context7 \
+  codex_add context7 \
     --url https://mcp.context7.com/mcp
 
   echo "Codex: done."
+fi
+
+if [[ "$DRY_RUN" != true ]]; then
+  echo
+  warn_plaintext_leftovers
 fi
 
 echo "Restart Claude Code / Codex for changes to take effect."

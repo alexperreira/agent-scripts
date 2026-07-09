@@ -194,9 +194,16 @@ Skip branching (`--no-checkout`) for read-only investigation sessions.
 
 ### Standard invocation
 
+Always fetch before branching:
+
 ```bash
+git fetch origin && git status -sb
 ~/scripts/agent-session --topic "<short-topic>" --push
 ```
+
+`git status` reports "up to date with 'origin/main'" by comparing against the
+last fetch, not the remote. Without a fetch you can branch from a stale base and
+build a PR that fights work already merged upstream.
 
 Creates `agent/<repo>/<YYYYMMDD>-<topic-slug>` (or checks it out if it exists),
 saves a snapshot to `~/.local/share/agent-logs/`, and sets upstream.
@@ -257,6 +264,9 @@ To target a branch explicitly:
 - Bootstrap symlinks: `~/scripts/bootstrap-home-links --apply`
 - Project registry: `~/Projects/agent-scripts/current-projects`
 - Project sync: `~/scripts/sync-projects`
+- MCP registration: `~/scripts/setup-claude-mcps`
+- Shared skills: `~/Projects/agent-scripts/skills/`
+- Secrets: `~/.secrets` (mode `600`; never committed, never printed)
 
 ## Current Projects
 
@@ -286,4 +296,49 @@ Or with options:
 - Uncommitted changes → skip pull, print warning
 - Diverged history → skip pull, print warning
 - Non-git directory with same name → skip, print warning
+
+## Skills & Plugins
+
+Claude Code and Codex both load Agent Skills: a directory containing a `SKILL.md`
+with YAML frontmatter (`name`, `description`). The description is what the model
+matches on, so write it as a trigger, not a summary.
+
+Machine-wide skills live in **one** place and are shared by both agents:
+
+```
+~/Projects/agent-scripts/skills/<name>/SKILL.md
+```
+
+**Claude Code** loads the repo as a plugin. Skills are namespaced `alex-workflow:<name>`:
+
+```
+/plugin marketplace add ~/Projects/agent-scripts
+/plugin install alex-workflow@agent-scripts
+```
+
+**Codex** has no plugin system, so `~/scripts/bootstrap-home-links --apply`
+symlinks each skill into `~/.codex/skills/<name>`. It links per-skill and never
+replaces the directory, which also holds Codex's bundled skills.
+
+**Project-scoped skills** go in `.claude/skills/<name>/SKILL.md` inside the repo
+they serve.
+
+Custom slash commands (`.claude/commands/*.md`) still work, but new workflows
+should be skills — they support supporting files, tool restrictions, and
+model-initiated invocation.
+
+Every skill adds to the always-on token cost of every session. Check it with
+`claude plugin details alex-workflow` before adding one.
+
+## Secrets
+
+- API keys live only in `~/.secrets` (mode `600`), never in a repo and never in
+  an agent config file.
+- Never pass a secret *value* to `claude mcp add -e` or `codex mcp add --env`:
+  both CLIs persist it in cleartext into `~/.claude.json` and
+  `~/.codex/config.toml`. Register a `bash -c` wrapper that sources `~/.secrets`
+  at spawn time instead. See `~/scripts/setup-claude-mcps`.
+- If a key ever lands in one of those files, treat it as compromised: rotate it,
+  update `~/.secrets`, then run `setup-claude-mcps --replace`.
+- Never read, print, or commit the contents of `~/.secrets`.
 

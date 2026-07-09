@@ -1,0 +1,17 @@
+{
+  "name": "agent-scripts",
+  "owner": {
+    "name": "Alex Perreira"
+  },
+  "metadata": {
+    "description": "Alex Perreira's machine-wide agent workflow tooling.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "alex-workflow",
+      "source": "./",
+      "description": "Workflow skills (project scaffolding, agent sessions, repo sync) and mobile skills (Expo, React Native)."
+    }
+  ]
+}
