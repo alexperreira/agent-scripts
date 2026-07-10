@@ -61,6 +61,30 @@ frontmatter. `scripts/check` enforces that the frontmatter `name` matches the
 directory name. Skills cost tokens in every session — check with
 `claude plugin details alex-workflow`.
 
+### Editing a skill
+
+Installing a plugin **copies it into a snapshot** under
+`~/.claude/plugins/cache/`. Editing `skills/*/SKILL.md` in this repo does not
+change what an installed session loads.
+
+While iterating, load straight from the working tree — no install, no cache:
+
+```bash
+claude --plugin-dir ~/Projects/agent-scripts    # then /reload-plugins after edits
+```
+
+Once the change is committed and pushed, refresh the installed copy:
+
+```bash
+claude plugin marketplace update agent-scripts
+claude plugin update alex-workflow@agent-scripts   # the @marketplace suffix is required
+```
+
+`plugin.json` deliberately omits `version`, so the plugin is versioned by commit
+SHA and `plugin update` sees every new commit. If a literal `version` were
+pinned there, `update` would report "already at the latest version" and silently
+keep serving the stale snapshot.
+
 ## MCP servers
 
 ```bash

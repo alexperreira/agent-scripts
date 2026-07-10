@@ -330,6 +330,20 @@ model-initiated invocation.
 Every skill adds to the always-on token cost of every session. Check it with
 `claude plugin details alex-workflow` before adding one.
 
+Installing a plugin copies it into a snapshot under `~/.claude/plugins/cache/`,
+so editing a `SKILL.md` in the repo does **not** change what an installed session
+loads. Iterate with `claude --plugin-dir ~/Projects/agent-scripts` (plus
+`/reload-plugins`), and after committing refresh the install with:
+
+```
+claude plugin marketplace update agent-scripts
+claude plugin update alex-workflow@agent-scripts   # @marketplace suffix required
+```
+
+`plugin.json` omits `version` on purpose so the plugin is versioned by commit
+SHA. Pinning a literal version makes `plugin update` report "already at the
+latest version" and keep serving the stale snapshot.
+
 ## Secrets
 
 - API keys live only in `~/.secrets` (mode `600`), never in a repo and never in
