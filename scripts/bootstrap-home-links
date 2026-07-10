@@ -165,5 +165,5 @@ cat <<EOF
 
 Claude Code loads this repo's skills as a plugin, not via symlink:
   /plugin marketplace add ${REPO_ROOT}
-  /plugin install alex-workflow@agent-scripts
+  /plugin install flow@agent-scripts
 EOF

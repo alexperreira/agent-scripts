@@ -309,11 +309,11 @@ Machine-wide skills live in **one** place and are shared by both agents:
 ~/Projects/agent-scripts/skills/<name>/SKILL.md
 ```
 
-**Claude Code** loads the repo as a plugin. Skills are namespaced `alex-workflow:<name>`:
+**Claude Code** loads the repo as a plugin. Skills are namespaced `flow:<name>`:
 
 ```
 /plugin marketplace add ~/Projects/agent-scripts
-/plugin install alex-workflow@agent-scripts
+/plugin install flow@agent-scripts
 ```
 
 **Codex** has no plugin system, so `~/scripts/bootstrap-home-links --apply`
@@ -328,7 +328,7 @@ should be skills — they support supporting files, tool restrictions, and
 model-initiated invocation.
 
 Every skill adds to the always-on token cost of every session. Check it with
-`claude plugin details alex-workflow` before adding one.
+`claude plugin details flow` before adding one.
 
 Installing a plugin copies it into a snapshot under `~/.claude/plugins/cache/`,
 so editing a `SKILL.md` in the repo does **not** change what an installed session
@@ -337,7 +337,7 @@ loads. Iterate with `claude --plugin-dir ~/Projects/agent-scripts` (plus
 
 ```
 claude plugin marketplace update agent-scripts
-claude plugin update alex-workflow@agent-scripts   # @marketplace suffix required
+claude plugin update flow@agent-scripts   # @marketplace suffix required
 ```
 
 `plugin.json` omits `version` on purpose so the plugin is versioned by commit

@@ -1,5 +1,5 @@
 {
-  "name": "alex-workflow",
+  "name": "flow",
   "description": "Workflow skills (project scaffolding, agent sessions, repo sync) and mobile skills (Expo, React Native).",
   "author": {
     "name": "Alex Perreira"
