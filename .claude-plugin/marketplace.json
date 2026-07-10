@@ -9,7 +9,7 @@
   },
   "plugins": [
     {
-      "name": "alex-workflow",
+      "name": "flow",
       "source": "./",
       "description": "Workflow skills (project scaffolding, agent sessions, repo sync) and mobile skills (Expo, React Native)."
     }
