@@ -10,8 +10,8 @@ description: >
   mobile app from scratch, choosing between React Native libraries, or when Claude Code is about
   to run `create-expo-app` without guidance. Covers project init, folder structure, dependency
   selection, navigation setup, state management wiring, and dev environment config for a
-  WSL2/Ubuntu + single iPhone + no macOS setup. If someone asks about build/deploy, testing, or
-  platform gotchas, point them to the companion skills instead.
+  WSL2/Ubuntu + single iPhone + no macOS setup. If someone asks about build/deploy or platform
+  gotchas, point them to the companion skills instead.
 ---
 
 # Expo Project Scaffold
@@ -27,7 +27,7 @@ No placeholder architecture that needs to be ripped out later.
 ## When NOT to Use This Skill
 
 - Modifying an existing project's architecture → use `rn-component-patterns`
-- Build, deploy, OTA, or testing workflow → use `expo-build-deploy`
+- Build, deploy, or OTA workflow → use `expo-build-deploy`
 - iOS/Android platform differences or permission issues → use `rn-platform-gotchas`
 - Adding a single new screen to an existing app → probably doesn't need this skill
 
