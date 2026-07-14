@@ -80,7 +80,13 @@ expect_fail_contains "missing value for --owner" "${SCRIPT_DIR}/new-project" --n
 expect_fail_contains "missing value for --remote" "${SCRIPT_DIR}/agent-session" --topic demo --remote
 expect_fail_contains "missing value for --repo" "${SCRIPT_DIR}/bootstrap-home-links" --repo
 expect_fail_contains "missing value for --registry" "${SCRIPT_DIR}/sync-projects" --registry
-expect_fail_contains "unknown option: --nope" "${SCRIPT_DIR}/setup-claude-mcps" --nope
+expect_fail_contains "unknown argument: --nope" "${SCRIPT_DIR}/setup-claude-mcps" --nope
+
+echo "==> common.sh run() dry-run check"
+run_out="$(DRY_RUN=true bash -c 'source "$1"; run echo hi' _ "${SCRIPT_DIR}/lib/common.sh")"
+[[ "$run_out" == "[dry-run] echo hi" ]] || die "run() dry-run output unexpected: ${run_out}"
+run_out="$(DRY_RUN=false bash -c 'source "$1"; run echo hi' _ "${SCRIPT_DIR}/lib/common.sh")"
+[[ "$run_out" == "hi" ]] || die "run() live output unexpected: ${run_out}"
 
 echo "==> new-project dry-run smoke check (no --stack)"
 "${SCRIPT_DIR}/new-project" --name smoke-test-project --no-remote --dry-run >/dev/null

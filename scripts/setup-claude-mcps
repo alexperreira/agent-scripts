@@ -48,11 +48,14 @@ while [[ $# -gt 0 ]]; do
     --replace)     REPLACE=true; shift ;;
     --dry-run)     DRY_RUN=true; shift ;;
     -h|--help)     usage; exit 0 ;;
-    *) die "unknown option: $1" ;;
+    *) die "unknown argument: $1" ;;
   esac
 done
 
-run() {
+# run_mcp CMD... — like the shared run(), but tolerates a non-zero exit from the
+# MCP CLI (a server may already be registered) and hints at --replace. Kept local
+# because that fallback is domain logic, not the generic dry-run wrapper.
+run_mcp() {
   if [[ "$DRY_RUN" == true ]]; then
     echo "[dry-run] $*"
   else
@@ -78,17 +81,17 @@ build_wrapper() {
 claude_add() {
   local name="$1"; shift
   if [[ "$REPLACE" == true ]]; then
-    run claude mcp remove -s user "$name"
+    run_mcp claude mcp remove -s user "$name"
   fi
-  run claude mcp add -s user "$name" "$@"
+  run_mcp claude mcp add -s user "$name" "$@"
 }
 
 codex_add() {
   local name="$1"; shift
   if [[ "$REPLACE" == true ]]; then
-    run codex mcp remove "$name"
+    run_mcp codex mcp remove "$name"
   fi
-  run codex mcp add "$name" "$@"
+  run_mcp codex mcp add "$name" "$@"
 }
 
 # Warn if any previously stored plaintext key is still sitting in a config file.
