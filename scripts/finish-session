@@ -105,3 +105,58 @@ if [[ "$DRY_RUN" == true ]]; then
   fi
   exit 0
 fi
+
+# ── Ensure pushed (never force) ──────────────────────────────────────────────
+if ! git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' >/dev/null 2>&1; then
+  run git push -u origin "$BRANCH"
+elif [[ -n "$(git rev-list '@{upstream}..HEAD' 2>/dev/null)" ]]; then
+  run git push
+fi
+
+# ── Ensure a PR exists ───────────────────────────────────────────────────────
+if gh pr view "$BRANCH" >/dev/null 2>&1; then
+  echo "PR already exists for ${BRANCH}"
+elif [[ "$DRAFT" == true ]]; then
+  run gh pr create --base "$BASE" --head "$BRANCH" --title "$TITLE" --body "$BODY" --draft
+else
+  run gh pr create --base "$BASE" --head "$BRANCH" --title "$TITLE" --body "$BODY"
+fi
+
+pr_url="$(gh pr view "$BRANCH" --json url --jq .url 2>/dev/null || echo "")"
+
+if [[ "$DRAFT" == true ]]; then
+  echo "Draft PR ready: ${pr_url}"
+  echo "Mark it ready, then re-run finish-session to land it."
+  exit 0
+fi
+
+if [[ "$DO_MERGE" == false ]]; then
+  echo "PR ready (auto-merge not enabled): ${pr_url}"
+  exit 0
+fi
+
+# ── Enable merge-when-green ───────────────────────────────────────────────────
+run gh pr merge "$BRANCH" --auto "$merge_flag" --delete-branch
+
+if [[ "$WAIT" == false ]]; then
+  echo "Auto-merge enabled; lands when '${BASE}' checks pass: ${pr_url}"
+  exit 0
+fi
+
+# ── Wait for merge, then clean up locally ────────────────────────────────────
+echo "Waiting for CI + auto-merge on ${pr_url} ..."
+while true; do
+  state="$(gh pr view "$BRANCH" --json state --jq .state 2>/dev/null || echo "")"
+  [[ "$state" == "MERGED" ]] && break
+  [[ "$state" == "CLOSED" ]] && die "PR was closed without merging: ${pr_url}"
+  if gh pr checks "$BRANCH" 2>/dev/null | grep -qiE '\bfail'; then
+    die "required checks failing — PR left open: ${pr_url}"
+  fi
+  sleep 10
+done
+
+echo "Merged. Cleaning up local branch."
+run git checkout "$BASE"
+run git pull --ff-only
+run git branch -d "$BRANCH"
+echo "Done. ${BRANCH} landed into ${BASE}."
