@@ -309,62 +309,21 @@ invisible on Android. Always include `elevation` or use the helper.
 
 ## Permissions
 
-iOS and Android handle permissions differently at both the request and denial level. The
-pattern that works for both: **request at point of use, handle denial gracefully.**
+iOS and Android differ at both the request and denial level. The rule that works for both:
+**request at point of use, never at launch, and recover from permanent denial with a Settings
+fallback.** Once denied, iOS silently returns `denied` on every future `request*Async()` call,
+and Android does the same after "Don't ask again" — so always check `get*PermissionsAsync()`
+first and offer `Linking.openSettings()`.
 
-### Request Pattern
+Expo config plugins add the required iOS plist / Android manifest entries automatically when you
+install the package, so you rarely edit those files by hand. One Android footgun:
+`expo-notifications` needs a notification channel on Android 8+, or notifications are silently
+dropped.
 
-Never request permissions at app launch. Request at the moment the user takes an action
-that requires the permission:
-
-```tsx
-import * as ImagePicker from 'expo-image-picker';
-import { Alert, Linking } from 'react-native';
-
-async function pickImage() {
-  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-  if (status !== 'granted') {
-    Alert.alert('Permission Required',
-      'Please grant photo access in Settings to use this feature.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Open Settings', onPress: () => Linking.openSettings() },
-      ]);
-    return;
-  }
-
-  const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] });
-  if (!result.canceled) { /* handle result.assets[0] */ }
-}
-```
-
-### Permanent Denial Handling
-
-Both platforms can reach a state where the permission dialog never shows again:
-
-- **iOS:** After the first denial, all future `request*Async()` calls silently return `denied`.
-- **Android:** After selecting "Don't ask again," same behavior.
-
-The only recovery is `Linking.openSettings()`. Always check current status with
-`get*PermissionsAsync()` before requesting, and always have a Settings fallback.
-
-### Common Expo Permissions
-
-| Feature | Package | iOS info.plist key | Android manifest permission |
-|---------|---------|-------------------|---------------------------|
-| Camera | `expo-camera` | `NSCameraUsageDescription` | `CAMERA` |
-| Photo library | `expo-image-picker` | `NSPhotoLibraryUsageDescription` | `READ_MEDIA_IMAGES` (API 33+) |
-| Location | `expo-location` | `NSLocationWhenInUseUsageDescription` | `ACCESS_FINE_LOCATION` |
-| Notifications | `expo-notifications` | Auto-configured | Auto-configured (channel required) |
-| Microphone | `expo-audio` | `NSMicrophoneUsageDescription` | `RECORD_AUDIO` |
-| Contacts | `expo-contacts` | `NSContactsUsageDescription` | `READ_CONTACTS` |
-
-**Note:** Expo config plugins handle manifest/plist entries automatically when you install the
-package and run `npx expo prebuild`. You rarely need to edit these files manually.
-
-**Android-specific:** Notifications require creating a notification channel on Android 8+.
-If you don't create a channel, notifications are silently dropped.
+→ Full request-pattern code, the per-feature permission/plist/manifest matrix, the API 33+
+granular-media changes, and config-plugin examples live in
+[`references/permissions.md`](references/permissions.md) — read it when implementing a
+permission flow.
 
 ---
 

@@ -31,6 +31,18 @@ scripts/new-project --help
 - `--owner`: `alexperreira`
 - `--license`: `mit`
 
+## Environment overrides
+
+The identity defaults are env-configurable so the generator works on other
+machines/accounts without editing the script. Precedence is **CLI flag > env
+var > built-in default**:
+
+| Env var | Sets | Default |
+|---|---|---|
+| `AGENT_SCRIPTS_OWNER` | GitHub owner/org (same as `--owner`) | `alexperreira` |
+| `AGENT_SCRIPTS_AUTHOR` | Author name in `LICENSE` | `Alex Perreira` |
+| `AGENT_SCRIPTS_WEBSITE` | Site/blog URL | `alexhacks.net` |
+
 ## Notes
 
 - Prefer keeping repos on the WSL filesystem (not under `/mnt/c`) for performance.

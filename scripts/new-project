@@ -21,10 +21,15 @@ Options:
   --description         Short description for README (optional)
   --projects-dir        Base directory (default: $HOME/Projects)
   --license             mit|none (default: mit)
-  --owner               GitHub owner/org (default: alexperreira)
+  --owner               GitHub owner/org (default: $AGENT_SCRIPTS_OWNER or alexperreira)
   --no-remote           Skip GitHub remote creation/push (local-only)
   --dry-run             Print actions without writing
   --help, -h            Show this help
+
+Environment (overridden by the flags above; used as defaults):
+  AGENT_SCRIPTS_OWNER     GitHub owner/org        (default: alexperreira)
+  AGENT_SCRIPTS_AUTHOR    Author name for LICENSE (default: Alex Perreira)
+  AGENT_SCRIPTS_WEBSITE   Site/blog URL           (default: alexhacks.net)
 
 Examples:
   scripts/new-project --name my-tool --stack "typescript, node, pnpm" --visibility private
@@ -163,12 +168,12 @@ TECH_STACK=""
 DESCRIPTION=""
 PROJECTS_DIR="${HOME}/Projects"
 LICENSE_KIND="mit"
-GITHUB_OWNER="alexperreira"
+GITHUB_OWNER="${AGENT_SCRIPTS_OWNER:-alexperreira}"
 CREATE_REMOTE="true"
 DRY_RUN="false"
 
-AUTHOR="Alex Perreira"
-WEBSITE="alexhacks.net"
+AUTHOR="${AGENT_SCRIPTS_AUTHOR:-Alex Perreira}"
+WEBSITE="${AGENT_SCRIPTS_WEBSITE:-alexhacks.net}"
 YEAR="$(date +%Y)"
 DATE_TODAY="$(date +%Y-%m-%d)"
 

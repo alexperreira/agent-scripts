@@ -68,15 +68,6 @@ uptodate=0
 skipped=0
 errors=0
 
-run() {
-  # run CMD... — executes or dry-run-prints
-  if [[ "$DRY_RUN" == "true" ]]; then
-    echo "[dry-run] $*"
-  else
-    "$@"
-  fi
-}
-
 sync_repo() {
   local slug="$1"          # owner/repo
   local repo_name="${slug##*/}"
