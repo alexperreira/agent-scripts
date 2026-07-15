@@ -81,6 +81,7 @@ expect_fail_contains "missing value for --remote" "${SCRIPT_DIR}/agent-session" 
 expect_fail_contains "missing value for --repo" "${SCRIPT_DIR}/bootstrap-home-links" --repo
 expect_fail_contains "missing value for --registry" "${SCRIPT_DIR}/sync-projects" --registry
 expect_fail_contains "unknown argument: --nope" "${SCRIPT_DIR}/setup-claude-mcps" --nope
+expect_fail_contains "missing value for --title" "${SCRIPT_DIR}/finish-session" --title
 
 echo "==> common.sh run() dry-run check"
 run_out="$(DRY_RUN=true bash -c 'source "$1"; run echo hi' _ "${SCRIPT_DIR}/lib/common.sh")"

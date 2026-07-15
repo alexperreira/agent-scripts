@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# finish-session — close out an agent session: ensure a PR, land it when CI is
+# green, and clean up the branch. Symmetric partner to agent-session.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh"
+
+BASE="main"
+TITLE=""
+BODY=""
+STRATEGY="squash"   # squash | merge | rebase
+DRAFT=false
+DO_MERGE=true
+WAIT=true
+DRY_RUN=false
+
+usage() {
+  cat <<'EOF'
+finish-session — open/reuse a PR for the current branch, land it when CI is
+green, and clean up.
+
+Usage:
+  scripts/finish-session [options]
+
+Options:
+  --title TEXT       Override the auto-derived PR title
+  --body TEXT        Override the auto-derived PR body
+  --base BRANCH      Base branch to merge into (default: main)
+  --squash           Squash merge (default)
+  --merge            Merge commit instead of squash
+  --rebase           Rebase merge instead of squash
+  --draft            Open the PR as a draft; do not enable auto-merge
+  --no-merge         Ensure the PR exists, but do not enable auto-merge
+  --no-wait          Enable auto-merge and return; do not block until merged
+  --dry-run          Print the git/gh commands without executing them
+  --help, -h         Show this help
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --title)    require_arg_value "$1" "${2:-}"; TITLE="${2:-}"; shift 2 ;;
+    --body)     require_arg_value "$1" "${2:-}"; BODY="${2:-}"; shift 2 ;;
+    --base)     require_arg_value "$1" "${2:-}"; BASE="${2:-}"; shift 2 ;;
+    --squash)   STRATEGY="squash"; shift ;;
+    --merge)    STRATEGY="merge"; shift ;;
+    --rebase)   STRATEGY="rebase"; shift ;;
+    --draft)    DRAFT=true; shift ;;
+    --no-merge) DO_MERGE=false; shift ;;
+    --no-wait)  WAIT=false; shift ;;
+    --dry-run)  DRY_RUN=true; shift ;;
+    --help|-h)  usage; exit 0 ;;
+    *)          die "unknown argument: $1" ;;
+  esac
+done
+
+require_cmd git
+require_cmd gh
+
+# ── Preconditions ────────────────────────────────────────────────────────────
+BRANCH="$(git symbolic-ref --short HEAD 2>/dev/null || echo "")"
+[[ -n "$BRANCH" ]]         || die "detached HEAD — checkout a feature branch first"
+[[ "$BRANCH" != "$BASE" ]] || die "on base branch '${BASE}' — nothing to finish"
+
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  die "uncommitted changes — commit or stash before finishing"
+fi
+
+ahead="$(git rev-list --count "${BASE}..HEAD" 2>/dev/null || echo 0)"
+[[ "$ahead" -gt 0 ]] || die "no commits ahead of '${BASE}' — nothing to land"
