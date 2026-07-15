@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+# finish-session — close out an agent session: ensure a PR, land it when CI is
+# green, and clean up the branch. Symmetric partner to agent-session.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh"
+
+BASE="main"
+TITLE=""
+BODY=""
+STRATEGY="squash"   # squash | merge | rebase
+DRAFT=false
+DO_MERGE=true
+WAIT=true
+DRY_RUN=false
+
+usage() {
+  cat <<'EOF'
+finish-session — open/reuse a PR for the current branch, land it when CI is
+green, and clean up.
+
+Usage:
+  scripts/finish-session [options]
+
+Options:
+  --title TEXT       Override the auto-derived PR title
+  --body TEXT        Override the auto-derived PR body
+  --base BRANCH      Base branch to merge into (default: main)
+  --squash           Squash merge (default)
+  --merge            Merge commit instead of squash
+  --rebase           Rebase merge instead of squash
+  --draft            Open the PR as a draft; do not enable auto-merge
+  --no-merge         Ensure the PR exists, but do not enable auto-merge
+  --no-wait          Enable auto-merge and return; do not block until merged
+  --dry-run          Print the git/gh commands without executing them
+  --help, -h         Show this help
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --title)    require_arg_value "$1" "${2:-}"; TITLE="${2:-}"; shift 2 ;;
+    --body)     require_arg_value "$1" "${2:-}"; BODY="${2:-}"; shift 2 ;;
+    --base)     require_arg_value "$1" "${2:-}"; BASE="${2:-}"; shift 2 ;;
+    --squash)   STRATEGY="squash"; shift ;;
+    --merge)    STRATEGY="merge"; shift ;;
+    --rebase)   STRATEGY="rebase"; shift ;;
+    --draft)    DRAFT=true; shift ;;
+    --no-merge) DO_MERGE=false; shift ;;
+    --no-wait)  WAIT=false; shift ;;
+    --dry-run)  DRY_RUN=true; shift ;;
+    --help|-h)  usage; exit 0 ;;
+    *)          die "unknown argument: $1" ;;
+  esac
+done
+
+require_cmd git
+require_cmd gh
+
+# ── Preconditions ────────────────────────────────────────────────────────────
+BRANCH="$(git symbolic-ref --short HEAD 2>/dev/null || echo "")"
+[[ -n "$BRANCH" ]]         || die "detached HEAD — checkout a feature branch first"
+[[ "$BRANCH" != "$BASE" ]] || die "on base branch '${BASE}' — nothing to finish"
+
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  die "uncommitted changes — commit or stash before finishing"
+fi
+
+ahead="$(git rev-list --count "${BASE}..HEAD" 2>/dev/null || echo 0)"
+[[ "$ahead" -gt 0 ]] || die "no commits ahead of '${BASE}' — nothing to land"
+
+# ── Derive PR title/body ─────────────────────────────────────────────────────
+derive_title() {
+  local topic="${BRANCH##*/}"                                   # last path segment
+  topic="${topic#[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-}"    # strip YYYYMMDD-
+  topic="${topic//-/ }"                                         # de-slug
+  local first="${topic:0:1}"
+  printf '%s%s' "$(printf '%s' "$first" | tr '[:lower:]' '[:upper:]')" "${topic:1}"
+}
+
+[[ -n "$TITLE" ]] || TITLE="$(derive_title)"
+[[ -n "$BODY" ]]  || BODY="$(git log "${BASE}..HEAD" --pretty=format:'- %s')"
+
+merge_flag="--${STRATEGY}"
+
+# ── Dry-run: print the plan from local state only (no gh calls) ───────────────
+if [[ "$DRY_RUN" == true ]]; then
+  echo "PR title: ${TITLE}"
+  echo "[dry-run] git push -u origin ${BRANCH}   (only if no upstream / ahead)"
+  echo "[dry-run] gh pr create --base ${BASE} --head ${BRANCH} --title \"${TITLE}\" --body <${ahead} commit(s)>"
+  if [[ "$DRAFT" == true ]]; then
+    echo "[dry-run] --draft: create draft PR and stop (no auto-merge)"
+  elif [[ "$DO_MERGE" == false ]]; then
+    echo "[dry-run] --no-merge: ensure PR only (no auto-merge)"
+  else
+    echo "[dry-run] gh pr merge ${BRANCH} --auto ${merge_flag} --delete-branch"
+    if [[ "$WAIT" == true ]]; then
+      echo "[dry-run] wait for merge, then: git checkout ${BASE} && git pull --ff-only && git branch -d ${BRANCH}"
+    else
+      echo "[dry-run] --no-wait: enable auto-merge and return"
+    fi
+  fi
+  exit 0
+fi
+
+# ── Ensure pushed (never force) ──────────────────────────────────────────────
+if ! git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' >/dev/null 2>&1; then
+  run git push -u origin "$BRANCH"
+elif [[ -n "$(git rev-list '@{upstream}..HEAD' 2>/dev/null)" ]]; then
+  run git push
+fi
+
+# ── Ensure a PR exists ───────────────────────────────────────────────────────
+if gh pr view "$BRANCH" >/dev/null 2>&1; then
+  echo "PR already exists for ${BRANCH}"
+elif [[ "$DRAFT" == true ]]; then
+  run gh pr create --base "$BASE" --head "$BRANCH" --title "$TITLE" --body "$BODY" --draft
+else
+  run gh pr create --base "$BASE" --head "$BRANCH" --title "$TITLE" --body "$BODY"
+fi
+
+pr_url="$(gh pr view "$BRANCH" --json url --jq .url 2>/dev/null || echo "")"
+
+if [[ "$DRAFT" == true ]]; then
+  echo "Draft PR ready: ${pr_url}"
+  echo "Mark it ready, then re-run finish-session to land it."
+  exit 0
+fi
+
+if [[ "$DO_MERGE" == false ]]; then
+  echo "PR ready (auto-merge not enabled): ${pr_url}"
+  exit 0
+fi
+
+# ── Enable merge-when-green ───────────────────────────────────────────────────
+run gh pr merge "$BRANCH" --auto "$merge_flag" --delete-branch
+
+if [[ "$WAIT" == false ]]; then
+  echo "Auto-merge enabled; lands when '${BASE}' checks pass: ${pr_url}"
+  exit 0
+fi
+
+# ── Wait for merge, then clean up locally ────────────────────────────────────
+echo "Waiting for CI + auto-merge on ${pr_url} ..."
+while true; do
+  state="$(gh pr view "$BRANCH" --json state --jq .state 2>/dev/null || echo "")"
+  [[ "$state" == "MERGED" ]] && break
+  [[ "$state" == "CLOSED" ]] && die "PR was closed without merging: ${pr_url}"
+  if gh pr checks "$BRANCH" 2>/dev/null | grep -qiE '\bfail'; then
+    die "required checks failing — PR left open: ${pr_url}"
+  fi
+  sleep 10
+done
+
+echo "Merged. Cleaning up local branch."
+run git checkout "$BASE"
+run git pull --ff-only
+run git branch -d "$BRANCH"
+echo "Done. ${BRANCH} landed into ${BASE}."
