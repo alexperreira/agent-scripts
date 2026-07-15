@@ -71,3 +71,37 @@ fi
 
 ahead="$(git rev-list --count "${BASE}..HEAD" 2>/dev/null || echo 0)"
 [[ "$ahead" -gt 0 ]] || die "no commits ahead of '${BASE}' — nothing to land"
+
+# ── Derive PR title/body ─────────────────────────────────────────────────────
+derive_title() {
+  local topic="${BRANCH##*/}"                                   # last path segment
+  topic="${topic#[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-}"    # strip YYYYMMDD-
+  topic="${topic//-/ }"                                         # de-slug
+  local first="${topic:0:1}"
+  printf '%s%s' "$(printf '%s' "$first" | tr '[:lower:]' '[:upper:]')" "${topic:1}"
+}
+
+[[ -n "$TITLE" ]] || TITLE="$(derive_title)"
+[[ -n "$BODY" ]]  || BODY="$(git log "${BASE}..HEAD" --pretty=format:'- %s')"
+
+merge_flag="--${STRATEGY}"
+
+# ── Dry-run: print the plan from local state only (no gh calls) ───────────────
+if [[ "$DRY_RUN" == true ]]; then
+  echo "PR title: ${TITLE}"
+  echo "[dry-run] git push -u origin ${BRANCH}   (only if no upstream / ahead)"
+  echo "[dry-run] gh pr create --base ${BASE} --head ${BRANCH} --title \"${TITLE}\" --body <${ahead} commit(s)>"
+  if [[ "$DRAFT" == true ]]; then
+    echo "[dry-run] --draft: create draft PR and stop (no auto-merge)"
+  elif [[ "$DO_MERGE" == false ]]; then
+    echo "[dry-run] --no-merge: ensure PR only (no auto-merge)"
+  else
+    echo "[dry-run] gh pr merge ${BRANCH} --auto ${merge_flag} --delete-branch"
+    if [[ "$WAIT" == true ]]; then
+      echo "[dry-run] wait for merge, then: git checkout ${BASE} && git pull --ff-only && git branch -d ${BRANCH}"
+    else
+      echo "[dry-run] --no-wait: enable auto-merge and return"
+    fi
+  fi
+  exit 0
+fi

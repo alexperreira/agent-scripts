@@ -92,6 +92,22 @@ run_out="$(DRY_RUN=false bash -c 'source "$1"; run echo hi' _ "${SCRIPT_DIR}/lib
 echo "==> new-project dry-run smoke check (no --stack)"
 "${SCRIPT_DIR}/new-project" --name smoke-test-project --no-remote --dry-run >/dev/null
 
+echo "==> finish-session dry-run smoke check (offline)"
+FS_TMP="$(mktemp -d)"
+trap 'rm -rf "$FS_TMP"' EXIT
+(
+  cd "$FS_TMP"
+  git init -q -b main
+  git -c user.email=t@e -c user.name=t commit -q --allow-empty -m "base"
+  git checkout -q -b agent/demo/20260714-demo-topic
+  git -c user.email=t@e -c user.name=t commit -q --allow-empty -m "work commit"
+  "${SCRIPT_DIR}/finish-session" --dry-run --base main
+) >"$FS_TMP/out.txt" 2>&1 || { cat "$FS_TMP/out.txt"; die "finish-session --dry-run failed"; }
+grep -q 'gh pr merge agent/demo/20260714-demo-topic --auto --squash --delete-branch' "$FS_TMP/out.txt" \
+  || { cat "$FS_TMP/out.txt"; die "dry-run missing expected auto-merge command"; }
+grep -q 'PR title: Demo topic' "$FS_TMP/out.txt" \
+  || { cat "$FS_TMP/out.txt"; die "dry-run missing derived title 'Demo topic'"; }
+
 echo "==> MEASUREMENT.md template render smoke check"
 (
   TMPL="${REPO_ROOT}/templates/empty/MEASUREMENT.md.tmpl"
