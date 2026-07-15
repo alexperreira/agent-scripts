@@ -8,6 +8,7 @@ Machine-wide workflow for Alex Perreira (WSL-first): rules, scripts, and templat
 - Shared Agent Skills: `skills/`
 - Project generator: `scripts/new-project`
 - Session helper (branch + push + local snapshots): `scripts/agent-session`
+- Session close-out (PR + land + cleanup): `scripts/finish-session`
 - Multi-repo sync: `scripts/sync-projects` (driven by `current-projects`)
 - MCP server registration: `scripts/setup-claude-mcps`
 - Bootstrap symlinks into `~`: `scripts/bootstrap-home-links`
@@ -50,6 +51,7 @@ Codex, which has no plugin system.
 |---|---|
 | `new-project` | `scripts/new-project` |
 | `agent-session` | `scripts/agent-session` |
+| `finish-session` | `scripts/finish-session` |
 | `sync-projects` | `scripts/sync-projects` |
 | `expo-project-scaffold` | Expo app structure, routing, auth |
 | `expo-build-deploy` | EAS Build, OTA updates, store submission |

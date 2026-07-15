@@ -180,6 +180,10 @@ PRs are **optional** for docs-only and small, low-risk changes in personal repos
 4. Delete the remote branch (auto if configured; otherwise `git push origin --delete <branch>`)
 5. Delete the local branch (`git branch -d <branch>`)
 
+Steps 1–5 are automated by `~/scripts/finish-session` (the close-out counterpart
+to `agent-session`): it pushes, opens/reuses the PR, enables merge-when-green via
+`gh pr merge --auto`, waits, and deletes the branch. See `docs/finish-session.md`.
+
 Project-scoped `CLAUDE.md` may tighten or override any of the above.
 
 ## Agent Session Startup
@@ -261,6 +265,7 @@ To target a branch explicitly:
 - Templates: `~/templates` (symlinked to your canonical templates repo)
 - Project generator: `~/scripts/new-project`
 - Agent session helper: `~/scripts/agent-session` (branch + push + local snapshots)
+- Session close-out: `~/scripts/finish-session` (PR + merge-when-green + cleanup)
 - Bootstrap symlinks: `~/scripts/bootstrap-home-links --apply`
 - Project registry: `~/Projects/agent-scripts/current-projects`
 - Project sync: `~/scripts/sync-projects`
