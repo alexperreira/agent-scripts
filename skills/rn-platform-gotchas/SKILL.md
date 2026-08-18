@@ -1,49 +1,54 @@
 ---
 name: rn-platform-gotchas
 description: >
-  iOS and Android platform differences, safe area handling, keyboard behavior, permissions, and
-  platform-specific styling for Expo/React Native apps. Use this skill whenever something works
-  on one platform but not the other, when building anything involving keyboard input, safe areas,
-  permissions, shadows, haptics, or back navigation, or when someone asks "why does this look
-  different on Android" or "this works on iOS but breaks on Android." Also trigger proactively
-  when Claude Code is about to use the built-in SafeAreaView (deprecated), write a form without
-  KeyboardAvoidingView, add a shadow without Android elevation fallback, request permissions
-  without platform-specific handling, or use Platform.OS checks where file extensions would be
-  cleaner. Covers the most common cross-platform issues in Expo SDK 55+ projects. If the question
-  is about project setup, use `expo-project-scaffold`. If it's about component architecture, use
-  `rn-component-patterns`. If it's about build/deploy, use `expo-build-deploy`.
+  iOS and Android platform differences for Expo/React Native: safe areas, edge-to-edge, keyboard
+  behavior, permissions, shadows, haptics, StatusBar, and Android back navigation. Use this skill
+  whenever something works on one platform but not the other, when building anything involving
+  keyboard input, safe areas, permissions, shadows, haptics, or back navigation, or when someone
+  asks "why does this look different on Android" or "this works on iOS but breaks on Android."
+  Also trigger proactively when Claude Code is about to use the built-in SafeAreaView (deprecated),
+  write a form without keyboard handling, add a shadow without Android elevation, request
+  permissions without platform-specific handling, or use Platform.OS checks where file extensions
+  would be cleaner. Targets Expo SDK 55+. If the question is about project setup, use
+  `expo-project-scaffold`. If it's about component architecture, use `rn-component-patterns`. If
+  it's about build/deploy, use `expo-build-deploy`.
 ---
 
 # React Native Platform Gotchas
 
-iOS and Android behave differently in ways that silently break your app if you only test on one
-platform. This skill covers the differences that actually matter in Expo SDK 55+ projects —
-not an exhaustive list, but the ones that cause real bugs.
+iOS and Android diverge in ways that ship silently when only one platform is tested. This covers
+the divergences that cause real bugs in Expo SDK 55+ — not an exhaustive list.
 
-The goal: code that works on both platforms the first time, without "oh, I forgot to test on Android."
+**The four that ship broken most often:**
+
+1. Safe areas come from `react-native-safe-area-context`. React Native's built-in `SafeAreaView`
+   is iOS-only and deprecated — treat any import of it as a bug.
+2. Edge-to-edge is the default on Android in SDK 55+. Insets are now mandatory on Android, not
+   just iOS, and `androidStatusBar.backgroundColor` in app.json no-ops.
+3. A card styled with iOS shadow props alone is invisible on Android. Every elevated surface
+   goes through the `shadow()` helper below.
+4. Every screen with a `TextInput` gets keyboard handling. Without it the keyboard covers the
+   input on both platforms.
 
 ---
 
-## When NOT to Use This Skill
+## Routing to Sibling Skills
 
-- Scaffolding a new project → use `expo-project-scaffold`
-- Component architecture or state management → use `rn-component-patterns`
-- Build, deploy, or OTA updates → use `expo-build-deploy`
+- Scaffolding a new project → `expo-project-scaffold`
+- Component architecture, state placement, list rendering → `rn-component-patterns`
+- Build, deploy, or OTA updates → `expo-build-deploy`
 
 ---
 
 ## Safe Areas
 
-Safe areas prevent content from being obscured by the status bar, notch, home indicator,
-or navigation bar. This is the #1 source of "looks fine on my phone, broken on theirs."
+Safe areas keep content clear of the status bar, notch, home indicator, and navigation bar.
+This is the #1 source of "looks fine on my phone, broken on theirs."
 
-### Setup
-
-Use `react-native-safe-area-context` (ships with Expo SDK 55). **Never use React Native's
-built-in `SafeAreaView`** — it's iOS-only and deprecated.
+Use `react-native-safe-area-context` (ships with Expo SDK 55) and wrap the app once:
 
 ```tsx
-// src/providers/index.tsx — wrap your app
+// src/providers/index.tsx
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -56,10 +61,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
 }
 ```
 
-### Hook vs Component
-
-Prefer `useSafeAreaInsets` over `SafeAreaView` in most cases. The hook gives you exact
-pixel values for each edge, which is more flexible:
+**Prefer `useSafeAreaInsets`** — it gives exact pixel values per edge, which composes with any
+layout:
 
 ```tsx
 import { View } from 'react-native';
@@ -76,68 +79,49 @@ export function MyScreen() {
 }
 ```
 
-Use the `SafeAreaView` component when you just need "apply all safe insets to this container"
-and don't need fine-grained control:
+Reach for the `SafeAreaView` component (from the same package) when the requirement is simply
+"apply all safe insets to this container":
 
 ```tsx
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-// Control which edges get insets with the `edges` prop
 <SafeAreaView edges={['top', 'bottom']} style={{ flex: 1 }}>
   {/* content */}
 </SafeAreaView>
 ```
 
+**Insets not needed:** tab screens using SDK 55 native tabs (handled automatically), stack
+screens with a header (the header covers the status bar), content inside `ScrollView` (use
+`contentContainerStyle` padding or `contentInsetAdjustmentBehavior="automatic"` on iOS).
+
+**Insets required:** screens without a header (custom header, fullscreen media, onboarding),
+floating action buttons and bottom sheets (offset by `insets.bottom`), custom tab bars, modals
+and overlays.
+
 ### Android Edge-to-Edge (SDK 55+)
 
-Edge-to-edge is now the default for Expo SDK 55+ on Android. Your app content renders behind
-the status bar and navigation bar. Key implications:
+App content renders behind the system bars by default. Consequences:
 
-- **`androidStatusBar.backgroundColor` in app.json is deprecated and has no effect.** Don't set it.
-- You **must** use safe area insets on Android now — before edge-to-edge, Android's opaque
-  system bars handled this for you. Not anymore.
-- `expo-status-bar` and `expo-navigation-bar` still work for setting bar style (light/dark
-  content), but background color and translucency customization is deprecated on Android 15+.
-- React Native's built-in `Modal` runs in its own native context. For edge-to-edge modals,
-  set `statusBarTranslucent` and `navigationBarTranslucent` to `true`, or use Expo Router
-  modal screens instead (recommended).
-
-### When You Need Insets (and When You Don't)
-
-**Don't need insets:** Tab bar screens using SDK 55 native tabs (handled automatically),
-stack screens with a header (header accounts for status bar), screens inside `ScrollView`
-(use `contentContainerStyle` padding or `contentInsetAdjustmentBehavior="automatic"` on iOS).
-
-**Do need insets:** Screens without headers (custom header, fullscreen media, onboarding),
-floating action buttons or bottom sheets (offset by `insets.bottom`), custom tab bar
-implementations, modals and overlays.
+- `androidStatusBar.backgroundColor` in app.json is deprecated and has no effect — it no-ops
+  with a warning. Bar background is no longer app-controlled on Android 15+.
+- Safe area insets are now load-bearing on Android. Before edge-to-edge, opaque system bars
+  handled this; that free pass is gone.
+- `expo-status-bar` and `expo-navigation-bar` still set bar *style* (light/dark content).
+  Background color and translucency customization is deprecated on Android 15+.
+- React Native's built-in `Modal` runs in its own native context. Prefer Expo Router modal
+  screens; if using the RN `Modal`, set `statusBarTranslucent` and `navigationBarTranslucent`
+  to `true`.
 
 ---
 
 ## Keyboard Handling
 
-The keyboard behaves differently on iOS and Android, and the default React Native tools are
-barely adequate. Here's the landscape:
-
-### Platform Behavior Differences
-
-| Behavior | iOS | Android (edge-to-edge) |
-|----------|-----|----------------------|
-| Keyboard pushes content up | Only with `KeyboardAvoidingView` | `adjustResize` is default, but with edge-to-edge it behaves like `adjustNothing` |
-| Keyboard height includes safe area | Yes (bottom inset baked in) | No |
-| Keyboard animation tracking | Smooth, frame-by-frame | Historically janky, fixed by `react-native-keyboard-controller` |
-| `Keyboard.dismiss()` reliability | Consistent | Can fail with custom inputs |
-
-### Recommended: `react-native-keyboard-controller`
-
-This is the library to use. It's included in Expo Go since SDK 54, provides identical behavior
-on both platforms, and integrates with `react-native-reanimated` for smooth animations.
-Reanimated has deprecated its own `useAnimatedKeyboard` in favor of this library.
-
-**Setup:**
+**Use `react-native-keyboard-controller`.** It is included in Expo Go since SDK 54, behaves
+identically on both platforms, and integrates with `react-native-reanimated` — which has
+deprecated its own `useAnimatedKeyboard` in favor of this library.
 
 ```tsx
-// src/app/_layout.tsx — add KeyboardProvider
+// src/app/_layout.tsx
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 
 export default function RootLayout() {
@@ -151,12 +135,7 @@ export default function RootLayout() {
 }
 ```
 
-Requires `react-native-reanimated` (already in most Expo projects).
-
-**For forms with multiple inputs:**
-
 ```tsx
-import { TextInput, View, StyleSheet } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardToolbar } from 'react-native-keyboard-controller';
 
 export function FormScreen() {
@@ -165,7 +144,6 @@ export function FormScreen() {
       <KeyboardAwareScrollView bottomOffset={62} contentContainerStyle={styles.container}>
         <TextInput placeholder="Email" style={styles.input} keyboardType="email-address" />
         <TextInput placeholder="Password" style={styles.input} secureTextEntry />
-        <TextInput placeholder="Confirm Password" style={styles.input} secureTextEntry />
       </KeyboardAwareScrollView>
       <KeyboardToolbar />
     </>
@@ -173,49 +151,26 @@ export function FormScreen() {
 }
 ```
 
-`KeyboardAwareScrollView` auto-scrolls to the focused input. `KeyboardToolbar` adds prev/next/done
-navigation — the kind of thing iOS does natively but Android doesn't.
+`KeyboardAwareScrollView` auto-scrolls to the focused input; `KeyboardToolbar` adds
+prev/next/done navigation, which iOS supplies natively and Android does not.
 
-### Fallback: `KeyboardAvoidingView`
+Requires `react-native-reanimated` (already present in most Expo projects).
 
-For simple screens with 1-2 inputs where you don't need the full `keyboard-controller`:
-
-```tsx
-import { KeyboardAvoidingView, Platform } from 'react-native';
-
-<KeyboardAvoidingView
-  behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-  style={{ flex: 1 }}
-  keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
->
-  {/* inputs */}
-</KeyboardAvoidingView>
-```
-
-The `behavior` and `keyboardVerticalOffset` props almost always need platform-specific
-values. This inconsistency is exactly why `react-native-keyboard-controller` is preferred.
+**Read `references/keyboard.md`** when the project cannot take the `keyboard-controller`
+dependency, or when debugging why the keyboard covers an input — it holds the per-platform
+behavior table and the `KeyboardAvoidingView` fallback with its edge-to-edge caveat.
 
 ---
 
 ## Platform-Specific Code
 
-Three approaches, from simplest to most isolated:
-
-### 1. `Platform.OS` — inline checks
-
-```tsx
-import { Platform } from 'react-native';
-
-const marginTop = Platform.OS === 'ios' ? 20 : 0;
-```
-
-Use for: one-off style tweaks, simple conditionals.
-
-### 2. `Platform.select` — platform-keyed objects
+| Scope of the difference | Mechanism |
+|---|---|
+| 1–2 values | `Platform.OS === 'ios' ? a : b` |
+| A style object that differs per platform | `Platform.select` inside `StyleSheet.create` |
+| The whole implementation differs | `.ios.tsx` / `.android.tsx` file extensions |
 
 ```tsx
-import { Platform, StyleSheet } from 'react-native';
-
 const styles = StyleSheet.create({
   container: {
     ...Platform.select({
@@ -227,66 +182,30 @@ const styles = StyleSheet.create({
 });
 ```
 
-Use for: style objects that differ significantly between platforms.
-
-### 3. Platform file extensions — `.ios.tsx` / `.android.tsx`
-
 ```
 components/
 ├── DatePicker.ios.tsx
 ├── DatePicker.android.tsx
-└── DatePicker.tsx        # optional — used as web/default fallback
+└── DatePicker.tsx        # optional — web/default fallback
 ```
 
-Metro resolves the correct file automatically based on the build target. Import as usual:
-```tsx
-import { DatePicker } from '@/components/DatePicker'; // resolves to .ios or .android
-```
+Metro resolves the correct file per build target; import the extensionless path
+(`import { DatePicker } from '@/components/DatePicker'`).
 
-Use for: components where the entire implementation differs between platforms (native date
-pickers, platform-specific animations, completely different UI).
-
-**When to use which:**
-- **1-2 lines different** → `Platform.OS` or `Platform.select`
-- **Shared logic, different styles** → `Platform.select` in `StyleSheet.create`
-- **Fundamentally different implementations** → file extensions
-- Don't use `Platform.OS` checks for things that should be file extensions. If an `if/else`
-  block for platform detection spans 20+ lines, split into separate files.
+**The 20-line rule:** when a platform `if/else` block spans 20+ lines, split it into
+`.ios.tsx` / `.android.tsx` files instead. Native date pickers, platform-specific animations,
+and genuinely different UIs belong in separate files.
 
 ---
 
 ## Shadows
 
-iOS and Android have completely different shadow systems. There is no single API that works
-on both.
-
-### iOS: Shadow props
-
-```tsx
-{
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.1,
-  shadowRadius: 4,
-}
-```
-
-### Android: Elevation
+iOS uses shadow props; Android uses `elevation`, which draws a gray-only Material shadow and
+also controls z-ordering. No single API covers both, so route every elevated surface through
+one helper:
 
 ```tsx
-{
-  elevation: 4,
-}
-```
-
-`elevation` on Android creates a Material Design shadow. It doesn't support color
-customization (always gray) and controls both shadow spread and z-ordering.
-
-### Cross-Platform Shadow Helper
-
-Create this once in `src/lib/shadows.ts`:
-
-```tsx
+// src/lib/shadows.ts
 import { Platform, ViewStyle } from 'react-native';
 
 export function shadow(depth: number = 2, color: string = '#000'): ViewStyle {
@@ -302,135 +221,11 @@ export function shadow(depth: number = 2, color: string = '#000'): ViewStyle {
 // Usage: ...shadow(2) in any StyleSheet
 ```
 
-**CC footgun:** Claude Code will set iOS shadow props and call it done. The card will be
-invisible on Android. Always include `elevation` or use the helper.
+**CC footgun:** Claude Code sets iOS shadow props and calls it done, leaving the card flat on
+Android. Every shadow either uses `shadow()` or includes `elevation` explicitly.
 
----
-
-## Permissions
-
-iOS and Android differ at both the request and denial level. The rule that works for both:
-**request at point of use, never at launch, and recover from permanent denial with a Settings
-fallback.** Once denied, iOS silently returns `denied` on every future `request*Async()` call,
-and Android does the same after "Don't ask again" — so always check `get*PermissionsAsync()`
-first and offer `Linking.openSettings()`.
-
-Expo config plugins add the required iOS plist / Android manifest entries automatically when you
-install the package, so you rarely edit those files by hand. One Android footgun:
-`expo-notifications` needs a notification channel on Android 8+, or notifications are silently
-dropped.
-
-→ Full request-pattern code, the per-feature permission/plist/manifest matrix, the API 33+
-granular-media changes, and config-plugin examples live in
-[`references/permissions.md`](references/permissions.md) — read it when implementing a
-permission flow.
-
----
-
-## Back Navigation (Android)
-
-Android has a hardware/gesture back button. iOS does not. This matters for:
-
-### Preventing Accidental Back
-
-Use `usePreventRemove` from Expo Router to block navigation when there are unsaved changes:
-
-```tsx
-import { usePreventRemove } from 'expo-router';
-import { useNavigation } from '@react-navigation/native';
-import { useState } from 'react';
-import { Alert } from 'react-native';
-
-export function EditScreen() {
-  const navigation = useNavigation();
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-
-  usePreventRemove(hasUnsavedChanges, ({ data }) => {
-    Alert.alert('Discard changes?', 'You have unsaved changes.',
-      [
-        { text: 'Stay', style: 'cancel' },
-        { text: 'Discard', style: 'destructive',
-          onPress: () => navigation.dispatch(data.action) },
-      ]);
-  });
-  // ... form content
-}
-```
-
-This works for both the Android back gesture and the iOS swipe-back gesture.
-
-### Tab Back Behavior
-
-On Android, pressing back on a non-initial tab should go to the first tab, then exit the app.
-Expo Router's tab navigator handles this correctly by default — don't override it unless
-you have a specific reason.
-
----
-
-## StatusBar
-
-Use `expo-status-bar`, not React Native's built-in `StatusBar` component.
-
-```tsx
-import { StatusBar } from 'expo-status-bar';
-
-// In your root layout or screen
-<StatusBar style="auto" />
-```
-
-| Prop | iOS | Android (edge-to-edge) |
-|------|-----|----------------------|
-| `style="auto"` | Adapts to light/dark mode | Adapts to light/dark mode |
-| `style="light"` | White text/icons | White text/icons |
-| `style="dark"` | Black text/icons | Black text/icons |
-| `backgroundColor` | No effect (always transparent) | **Deprecated** — no-ops with warning |
-| `translucent` | Always true | **Deprecated** — always translucent |
-| `hidden` | Works | Works |
-
-**Key point:** With edge-to-edge on Android, the status bar is always transparent. You
-control content appearance (light/dark icons) but not the background.
-
----
-
-## Styling Differences
-
-### Text Rendering
-
-iOS uses San Francisco; Android uses Roboto. They have different metrics for the same
-`fontSize`, which means:
-
-- A `Text` component that fits on one line on iOS might wrap on Android (or vice versa).
-- `lineHeight` values that look perfect on one platform may look too tight or loose on the other.
-- **Fix:** Test text-heavy screens on both platforms. Don't hardcode `numberOfLines` without
-  testing on Android.
-
-### Pressable vs TouchableOpacity
-
-`Pressable` is the recommended touch handler. It supports `android_ripple` for native
-Material feedback on Android:
-
-```tsx
-import { Pressable, Platform, Text } from 'react-native';
-
-<Pressable
-  onPress={handlePress}
-  android_ripple={{ color: 'rgba(0, 0, 0, 0.1)' }}
-  style={({ pressed }) => [
-    styles.button, pressed && Platform.OS === 'ios' && styles.buttonPressed,
-  ]}
->
-  <Text>Press Me</Text>
-</Pressable>
-```
-
-- On Android: `android_ripple` gives the native ripple effect.
-- On iOS: Use the `pressed` state to change opacity or scale.
-- `TouchableOpacity` still works but is considered legacy. Prefer `Pressable` for new code.
-
-### Border Radius + Elevation Clipping
-
-On Android, `overflow: 'hidden'` with `borderRadius` can clip shadows from `elevation`.
-Fix by separating the shadow container from the rounded content:
+On Android, `overflow: 'hidden'` with `borderRadius` clips the `elevation` shadow. Separate the
+shadow container from the rounded content:
 
 ```tsx
 <View style={shadow(2)}>
@@ -442,71 +237,136 @@ Fix by separating the shadow container from the rounded content:
 
 ---
 
-## Common Footguns
+## Permissions
 
-1. **Using React Native's built-in `SafeAreaView`.** It's iOS-only and deprecated. Use
-   `react-native-safe-area-context` always.
+**Request each permission at the moment the user takes the action that needs it** — a blanket
+prompt at launch gets denied.
 
-2. **Setting `androidStatusBar.backgroundColor` in app.json.** Deprecated in SDK 55 with
-   edge-to-edge. It no-ops and logs a warning.
+```tsx
+import * as ImagePicker from 'expo-image-picker';
+import { Alert, Linking } from 'react-native';
 
-3. **Writing a form without any keyboard handling.** The keyboard will cover inputs on both
-   platforms. Use `react-native-keyboard-controller`'s `KeyboardAwareScrollView` or at minimum
-   `KeyboardAvoidingView`.
+async function pickImage() {
+  const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
-4. **iOS shadow props without Android `elevation`.** Shadows are invisible on Android without
-   `elevation`. Use the cross-platform `shadow()` helper.
+  if (status !== 'granted') {
+    Alert.alert('Permission Required',
+      'Please grant photo access in Settings to use this feature.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Open Settings', onPress: () => Linking.openSettings() },
+      ]);
+    return;
+  }
 
-5. **Requesting permissions at app launch.** Users deny blanket permission requests. Request
-   at point of use with context for why.
+  const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] });
+  if (!result.canceled) { /* handle result.assets[0] */ }
+}
+```
 
-6. **Not handling permanent permission denial.** After "Don't ask again" on Android or first
-   denial on iOS, subsequent requests are silent. Always offer `Linking.openSettings()`.
+**Permanent denial is the state that breaks flows.** On iOS after the first denial, and on
+Android after "Don't ask again", every later `request*Async()` returns `denied` without showing
+a dialog. The only recovery is `Linking.openSettings()`, so check `get*PermissionsAsync()` first
+and always offer the Settings route.
 
-7. **Ignoring the Android back button.** Your app will feel broken if custom flows (forms,
-   wizards, modals) don't handle hardware back. Use `usePreventRemove` or `BackHandler`.
+**Android notifications require a notification channel on Android 8+.** Without a channel,
+notifications are dropped silently.
 
-8. **Using `TouchableOpacity` without `android_ripple`.** Missing native feedback on Android
-   makes the app feel non-native. Use `Pressable` with `android_ripple`.
+**Read `references/permissions.md`** before wiring any permission flow — it holds the
+package/plist/manifest-key table for every common permission, the config-plugin snippets that
+generate those entries, and the Android 13+ granular media permission rules.
 
-9. **Hardcoding `keyboardVerticalOffset` in `KeyboardAvoidingView`.** The correct value
-   depends on whether you have a header, tab bar, or custom chrome — and it differs between
-   platforms. This is why `react-native-keyboard-controller` is preferred.
+---
 
-10. **Testing only on iOS (or only on Android).** Text wrapping, shadow rendering, keyboard
-    behavior, safe areas, and permissions all differ. Test both or expect bug reports.
+## Android-Only Behavior
+
+Android has a hardware/gesture back button; iOS does not. Guard destructive navigation with
+`usePreventRemove` from `expo-router` — it covers both the Android back gesture and the iOS
+swipe-back gesture:
+
+```tsx
+import { usePreventRemove, useNavigation } from 'expo-router';
+import { Alert } from 'react-native';
+
+const navigation = useNavigation();
+
+usePreventRemove(hasUnsavedChanges, ({ data }) => {
+  Alert.alert('Discard changes?', 'You have unsaved changes.', [
+    { text: 'Stay', style: 'cancel' },
+    { text: 'Discard', style: 'destructive', onPress: () => navigation.dispatch(data.action) },
+  ]);
+});
+```
+
+**Read `references/android.md`** when working on StatusBar appearance, tab back behavior, or
+anything Android-specific beyond the above — it holds the `expo-status-bar` prop-by-platform
+table and the Expo Router tab back-stack behavior.
+
+---
+
+## Styling Differences
+
+**Text metrics differ:** iOS renders San Francisco, Android renders Roboto. The same `fontSize`
+produces different line widths, so a `Text` that fits on one line on iOS can wrap on Android, and
+a `lineHeight` tuned on one platform reads too tight or too loose on the other. Verify
+text-heavy screens and any hardcoded `numberOfLines` on both platforms before shipping.
+
+**`Pressable` is the touch handler for new code** (`TouchableOpacity` is legacy). It carries
+`android_ripple` for native Material feedback, which is what makes an app feel non-native on
+Android when it is missing:
+
+```tsx
+<Pressable
+  onPress={handlePress}
+  android_ripple={{ color: 'rgba(0, 0, 0, 0.1)' }}
+  style={({ pressed }) => [
+    styles.button, pressed && Platform.OS === 'ios' && styles.buttonPressed,
+  ]}
+>
+  <Text>Press Me</Text>
+</Pressable>
+```
+
+Android gets the ripple; iOS uses the `pressed` state for opacity or scale.
+
+**Haptics are a supplement, never the feedback itself.** `expo-haptics` drives the Taptic Engine
+on iOS and the vibration motor on Android, where the effect is coarser and no-ops entirely when
+the user has system haptics off. Pair every haptic with a visible state change.
 
 ---
 
 ## Checklist: Is It Cross-Platform Ready?
 
-Before shipping a screen or component, verify:
+Apply this to **every screen and component the change introduces or touches** — list them first,
+then walk the rows for each. Done means every listed screen has been checked on both platforms,
+not that the list "looks fine."
 
 **Safe areas:**
-- [ ] Using `react-native-safe-area-context`, NOT built-in `SafeAreaView`
+- [ ] Safe area imports come from `react-native-safe-area-context` (no built-in `SafeAreaView`)
 - [ ] `SafeAreaProvider` is in the root layout
-- [ ] Screens without headers apply safe area insets (top, bottom as needed)
-- [ ] Floating elements (FABs, bottom sheets) account for `insets.bottom`
+- [ ] Headerless screens apply insets; FABs and bottom sheets offset by `insets.bottom`
+- [ ] No `androidStatusBar.backgroundColor` in app.json
 
 **Keyboard:**
-- [ ] Forms with text inputs use `KeyboardAwareScrollView` or `KeyboardAvoidingView`
-- [ ] Keyboard doesn't cover the focused input on either platform
-- [ ] Submit button is visible while keyboard is open
+- [ ] Every screen with a `TextInput` uses `KeyboardAwareScrollView` (or the documented fallback)
+- [ ] The focused input and the submit button stay visible with the keyboard open, both platforms
 
 **Shadows:**
-- [ ] Cards/elevated elements have both iOS shadow props AND Android `elevation`
-- [ ] Or using a cross-platform `shadow()` helper
+- [ ] Every elevated surface uses `shadow()` or sets both iOS shadow props and `elevation`
 
 **Permissions:**
-- [ ] Permissions are requested at point of use, not at launch
-- [ ] Permanent denial is handled with a Settings redirect
-- [ ] iOS plist descriptions and Android manifest permissions are configured
+- [ ] Each permission is requested at its point of use
+- [ ] Permanent denial routes to `Linking.openSettings()`
+- [ ] plist descriptions and Android manifest entries exist (via config plugins)
 
-**Touch & interaction:**
-- [ ] Using `Pressable` with `android_ripple` (not bare `TouchableOpacity`)
-- [ ] Android hardware back is handled for custom flows (forms, modals)
+**Touch & navigation:**
+- [ ] Touchables are `Pressable` with `android_ripple`
+- [ ] Custom flows (forms, wizards, modals) handle Android back
 
-**Visual consistency:**
-- [ ] Text-heavy screens tested on both platforms for wrapping differences
-- [ ] StatusBar uses `expo-status-bar`, not the built-in component
-- [ ] No `androidStatusBar.backgroundColor` in app.json (deprecated)
+**Visual:**
+- [ ] Text-heavy screens checked on both platforms for wrapping
+- [ ] StatusBar appearance set via `expo-status-bar`
+
+**If every row passes, say so and stop.** A clean cross-platform review is a real result —
+report "no platform issues found" rather than inventing marginal concerns. For non-platform
+code quality on the same diff, hand off to `code-review-checklist`.

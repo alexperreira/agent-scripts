@@ -1,0 +1,5 @@
+# Machine-local Claude Code settings (per-machine permission grants, not shared)
+.claude/settings.local.json
+
+# Scratch: files staged for manual deletion (the Cowork device bridge cannot unlink)
+_to_delete/

@@ -1,7 +1,7 @@
 # Auth-Aware Routing Pattern
 
-Read this file when scaffolding a project that includes authentication. This pattern uses
-Expo Router's redirect mechanism with route groups to separate public and protected screens.
+Read this file when scaffolding a project that includes authentication. The pattern uses Expo
+Router's redirect mechanism with route groups to separate public and protected screens.
 
 ---
 
@@ -9,7 +9,7 @@ Expo Router's redirect mechanism with route groups to separate public and protec
 
 ```
 src/app/
-├── _layout.tsx          # Root: loads auth state, shows splash while loading
+├── _layout.tsx          # Root: loads auth state, holds splash while loading
 ├── index.tsx            # Redirects to (tabs) or (auth) based on auth state
 ├── (auth)/              # Public routes — login, register, forgot password
 │   ├── _layout.tsx      # Stack navigator, no header
@@ -18,6 +18,47 @@ src/app/
     ├── _layout.tsx      # Tab navigator
     └── ...
 ```
+
+## Root Layout — Hold the Splash Until the Token Read Resolves
+
+```tsx
+// src/app/_layout.tsx
+import { useEffect } from 'react';
+import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
+import { Providers } from '@/providers';
+import { useAuthStore } from '@/stores/useAuthStore';
+
+SplashScreen.preventAutoHideAsync();
+
+export default function RootLayout() {
+  const loadToken = useAuthStore((s) => s.loadToken);
+  const isLoading = useAuthStore((s) => s.isLoading);
+
+  useEffect(() => {
+    loadToken();
+  }, [loadToken]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      SplashScreen.hideAsync();
+    }
+  }, [isLoading]);
+
+  return (
+    <Providers>
+      <Stack>
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      </Stack>
+    </Providers>
+  );
+}
+```
+
+The SecureStore read is async. Holding the splash until it resolves is what keeps a logged-in
+user from seeing a flash of the login screen on cold start.
 
 ## Root Index — Redirect Based on Auth State
 
@@ -37,9 +78,8 @@ export default function Index() {
 }
 ```
 
-The root layout's splash screen stays visible while `isLoading` is true (see step 6 in the
-init sequence). By the time `index.tsx` renders, the token check has already completed and
-`isAuthenticated` is reliable.
+By the time `index.tsx` renders, the token check has completed, so `isAuthenticated` is
+trustworthy. This is also why redirects belong here rather than in a screen's `useEffect`.
 
 ## Auth Store — Zustand + SecureStore
 
@@ -80,10 +120,10 @@ export const useAuthStore = create<AuthState>((set) => ({
 ```
 
 **Key details:**
-- `isLoading` starts `true` — splash screen stays visible until `loadToken()` completes.
-- `SecureStore` is used instead of `AsyncStorage` because auth tokens are sensitive.
-- `getState()` can be called outside React components (e.g., in an API client) to read the
-  current token for `Authorization` headers:
+- `isLoading` starts `true` — the splash screen depends on it.
+- Tokens go in `SecureStore` (Keychain/Keystore), not `AsyncStorage`.
+- `getState()` reads the current token outside React, which is how the API client attaches the
+  `Authorization` header:
 
 ```tsx
 // src/lib/api.ts — non-React usage of Zustand
@@ -103,10 +143,10 @@ export default function AuthLayout() {
 }
 ```
 
-## 401 Handling in API Client
+## 401 Handling in the API Client
 
-When the API returns a 401, clear the token — this triggers a re-render that redirects back
-to the login screen automatically via the root `index.tsx` redirect:
+A 401 clears the token, which re-renders the root redirect and lands the user on login. Handling
+it here means no screen needs its own 401 branch:
 
 ```tsx
 // src/lib/api.ts
@@ -139,5 +179,8 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
 }
 ```
 
-This pattern means auth expiry is handled globally — no individual screen needs to check
-for 401s or redirect to login.
+This is the minimal version. When the API uses the standard `{ ok, data|error, meta }` envelope,
+`apiFetch` also unwraps `data` and surfaces `error.code` — `api-contract-design` owns that
+envelope and the error-code registry, and `auth-authorization-audit` covers whether a 401-clears-
+token flow is sufficient for the app's threat model (refresh tokens, forced logout, session
+fixation).

@@ -7,52 +7,55 @@ description: >
   hook or a component", "how do I handle loading/error states", or reviewing component code for
   architecture issues. Also trigger proactively when Claude Code is about to write a screen
   component with inline data fetching, create a god component with 200+ lines, put business logic
-  in a route file, or mix server state with client state. Covers component hierarchy, custom hook
-  patterns, state placement rules, performance basics, and TypeScript conventions for
-  Expo Router + Zustand + TanStack Query projects. If the question is about project setup or
-  scaffolding, use `expo-project-scaffold` instead. If it's about build/deploy, use
-  `expo-build-deploy`. If it's about iOS/Android platform differences, use `rn-platform-gotchas`.
+  in a route file, or mix server state with client state. Owns state placement, component
+  hierarchy, and TypeScript conventions for Expo Router + Zustand + TanStack Query projects. If
+  the question is about project setup or scaffolding, use `expo-project-scaffold` instead. If
+  it's about build/deploy, use `expo-build-deploy`. If it's about iOS/Android platform
+  differences, use `rn-platform-gotchas`.
 ---
 
 # React Native Component Patterns
 
-Opinionated patterns for building screens and components in Expo/React Native apps that use
-Expo Router, Zustand, and TanStack Query. These patterns assume the folder structure from the
-`expo-project-scaffold` skill is in place.
+Patterns for screens and components in Expo Router + Zustand + TanStack Query projects, assuming
+the folder structure from `expo-project-scaffold`.
 
-The goal: every component has one job, every piece of state has one home, and CC can modify
-any screen without breaking the rest of the app.
+**The four rules that decide most reviews:**
+
+1. **Route files in `src/app/` are one-line re-exports.** A route file that imports `useState`
+   or `useEffect` is misplaced logic.
+2. **Anything that came from an API lives in TanStack Query.** Zustand holds client-only state.
+3. **Every screen that fetches opens with the tri-state guard** — loading, error, empty — which
+   also narrows the type so the happy path needs no optional chaining.
+4. **Screen components stay under ~150 lines.** Past that, extract sub-components into the same
+   feature directory.
+
+Goal: every component has one job, every piece of state has one home, and CC can modify any
+screen without disturbing the rest of the app.
 
 ---
 
 ## Component Hierarchy
 
-There are exactly three levels of components. Don't invent more.
+There are exactly three levels.
 
 ### 1. Route files (`src/app/`)
-
-Thin re-exports only. No imports of `useState`, `useEffect`, or any hook. No JSX beyond
-a single default export.
 
 ```tsx
 // src/app/(tabs)/feed.tsx
 export { FeedScreen as default } from '@/components/features/feed/FeedScreen';
 ```
 
-If a route file contains anything else, it's wrong.
+That single line is the whole file. Route files declare navigation structure; screen components
+hold UI and behavior. Keeping them apart is what makes navigation refactors cheap and screens
+testable in isolation.
 
 ### 2. Screen components (`src/components/features/<feature>/`)
 
-Each screen is a single file that composes UI from smaller components and wires up data.
-A screen component:
-- Calls custom hooks (queries, mutations, stores)
-- Handles loading/error/empty states
-- Composes feature components and UI primitives
-- Does NOT contain reusable UI logic — that belongs in hooks or sub-components
+A screen calls hooks, handles the non-happy states, and composes children:
 
 ```tsx
 // src/components/features/feed/FeedScreen.tsx
-import { View, Text } from 'react-native';
+import { View } from 'react-native';
 import { useFeed } from '@/hooks/queries/useFeed';
 import { PostCard } from './PostCard';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
@@ -76,38 +79,28 @@ export function FeedScreen() {
 }
 ```
 
-**Screen component rules:**
-- One screen per file
-- File lives in `src/components/features/<feature>/`
-- Name matches the route: `feed.tsx` route → `FeedScreen.tsx` component
-- Max ~150 lines. If longer, extract sub-components into the same directory.
+One screen per file, named after its route (`feed.tsx` → `FeedScreen.tsx`), under ~150 lines.
+Reusable UI logic moves into a hook or a sub-component.
 
 ### 3. UI components
 
-Split into two categories:
+| Location | Scope | Rules |
+|---|---|---|
+| `src/components/ui/` | Generic primitives — `Button`, `Input`, `Card`, `Avatar`, `LoadingSpinner`, `ErrorMessage`, `EmptyState` | Props in, JSX out. No store or query hooks. |
+| `src/components/features/<feature>/` | Feature-specific — `PostCard`, `WorkoutRow`, `ProfileHeader` | May call feature hooks. Lives beside its screen. |
 
-**Primitives (`src/components/ui/`)** — Generic, reusable across any feature:
-- `Button`, `Input`, `Card`, `Avatar`, `LoadingSpinner`, `ErrorMessage`, `EmptyState`
-- Accept only props, no feature-specific logic
-- No direct hook calls to stores or queries
-
-**Feature components (`src/components/features/<feature>/`)** — Specific to one feature:
-- `PostCard`, `WorkoutRow`, `ProfileHeader`
-- May call feature-specific hooks
-- Live alongside their screen component
-
-The test: "Could another feature use this component unchanged?" If yes → `ui/`. If no →
+The test: "Could another feature use this component unchanged?" Yes → `ui/`. No →
 `features/<feature>/`.
 
 ---
 
 ## Custom Hook Patterns
 
-Hooks are where logic lives. Components render; hooks think.
+Components render; hooks think.
 
 ### Query hooks (`src/hooks/queries/`)
 
-One hook per data entity or query. Wraps TanStack Query's `useQuery`.
+One hook per data entity or query.
 
 ```tsx
 // src/hooks/queries/useWorkouts.ts
@@ -122,63 +115,30 @@ export function useWorkouts() {
   });
 }
 
-// For a single entity by ID:
+// Single entity by ID:
 export function useWorkout(id: string) {
   return useQuery({
     queryKey: ['workouts', id],
     queryFn: (): Promise<Workout> => apiFetch(`/workouts/${id}`),
-    enabled: !!id,  // Don't fire if id is empty
+    enabled: !!id,  // conditional queries use `enabled`, never an if-wrapper
   });
 }
 ```
 
 **Query hook rules:**
-- Always type the return with a Promise generic
-- Always use `enabled` for conditional queries (don't wrap in `if`)
-- Query keys should be hierarchical: `['workouts']` → `['workouts', id]`
-- Never call `useQuery` inside a callback or condition — hooks must be top-level
-
-### Mutation hooks (`src/hooks/mutations/`)
-
-One hook per write operation. Wraps TanStack Query's `useMutation`.
-
-```tsx
-// src/hooks/mutations/useCreatePost.ts
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiFetch } from '@/lib/api';
-import type { Post, CreatePostInput } from '@/types/post';
-
-export function useCreatePost() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (input: CreatePostInput): Promise<Post> =>
-      apiFetch('/posts', {
-        method: 'POST',
-        body: JSON.stringify(input),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['feed'] });
-    },
-  });
-}
-```
-
-**Mutation hook rules:**
-- Always invalidate related queries in `onSuccess`
-- Type both input and output
-- For optimistic updates, use `onMutate` + `onError` rollback (see TanStack Query docs)
-- The hook returns `{ mutate, mutateAsync, isPending, error }` — let the screen decide
-  which to use
+- Type the return with a `Promise<T>` generic on `queryFn` — this is what stops `any` from
+  leaking out of `response.json()`.
+- Conditional fetches use `enabled`; hooks stay at the top level of the function body.
+- Query keys are hierarchical: `['workouts']` → `['workouts', id]`.
+- `apiFetch` unwraps the `{ ok, data, meta }` response envelope — the envelope shape itself is
+  owned by `api-contract-design`. Types in `src/types/` describe the unwrapped `data` payload.
 
 ### Logic hooks (`src/hooks/`)
 
-For non-data logic that multiple components share. These don't call TanStack Query.
+Non-data logic shared by multiple components:
 
 ```tsx
 // src/hooks/useDebounce.ts
-import { useState, useEffect } from 'react';
-
 export function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState(value);
 
@@ -191,51 +151,51 @@ export function useDebounce<T>(value: T, delay: number): T {
 }
 ```
 
-**When to create a logic hook:** When the same `useState` + `useEffect` combination appears in
-two or more components. One instance is not enough — don't pre-abstract.
+**Extraction threshold:** the same `useState` + `useEffect` pair appearing in two or more
+components. One instance stays inline — pre-abstraction costs more than it saves.
+
+**Read `references/data-hooks.md`** when writing a mutation, optimistic update, paginated list,
+or a screen that reads route params — it holds the mutation hook template, invalidation rules,
+`useInfiniteQuery` wiring, and the `useLocalSearchParams` array-coercion pattern.
 
 ---
 
 ## State Placement Rules
 
-Every piece of state has exactly one correct home. This table is the decision tree:
+**This skill owns state placement.** Every piece of state has exactly one correct home:
 
 | Question | Answer | State lives in... |
 |----------|--------|-------------------|
 | Does the data come from an API? | Yes | TanStack Query (`useQuery` / `useMutation`) |
 | Is it UI state used by one component only? | Yes | Local `useState` in that component |
 | Is it UI state shared across screens? | Yes | Zustand store |
-| Is it form input state? | Yes | Local `useState` or a form library (React Hook Form) |
-| Is it derived from other state? | Yes | `useMemo` — don't store it separately |
+| Is it form input state? | Yes | Local `useState` or React Hook Form |
+| Is it derived from other state? | Yes | `useMemo` over the source values |
 | Is it the URL / route params? | Yes | Expo Router (`useLocalSearchParams`, `useGlobalSearchParams`) |
 
-**Route param type safety:** `useLocalSearchParams` returns `string | string[]` for each param
-by default. Always pass a type generic and coerce to string when passing to a query hook:
+**CC failure modes and their corrections:**
 
-```tsx
-const { id } = useLocalSearchParams<{ id: string }>();
-```
+| What CC writes | What it should be |
+|---|---|
+| `useEffect` + `useState` to fetch API data | `useQuery` — always, no exceptions |
+| A `isLoading` boolean in a Zustand store | TanStack Query's own `isLoading` |
+| A Zustand store for one component's state | `useState` in that component |
+| Server data copied into Zustand "for convenience" | Read from the query cache |
+| A filtered/sorted list stored via `useState` | `useMemo` over the source array |
+| Props threaded through 3+ non-consuming levels | Call the hook where the data is used, or a Zustand store for shared UI state |
+| A conditional query wrapped in `if` | `enabled: !!value` |
+| `router.push` inside `useEffect` | Navigate from event handlers or a root `<Redirect>` — `useEffect` navigation double-fires and races the router |
+| A list keyed by array index | A stable unique ID in `keyExtractor` / `key` |
 
-If a param could be an array (e.g., from a catch-all route), handle it explicitly:
-```tsx
-const rawId = useLocalSearchParams<{ id: string }>().id;
-const id = Array.isArray(rawId) ? rawId[0] : rawId;
-```
-
-**Common mistakes CC makes:**
-1. Fetching API data with `useEffect` + `useState` instead of `useQuery` — always wrong.
-2. Putting a loading boolean in Zustand when TanStack Query already provides `isLoading`.
-3. Creating a Zustand store for state that only one component uses — use `useState` instead.
-4. Duplicating server data into Zustand "for convenience" — read from the query cache instead.
-5. Storing derived values (filtered lists, computed totals) as state — use `useMemo`.
+The one legitimate `useEffect` in a screen is one-time setup: font loading, an auth check, or an
+AppState subscription.
 
 ---
 
 ## Loading, Error, and Empty States
 
-Every screen that fetches data must handle three non-happy states. Don't skip any of them.
-
-### Pattern: Tri-state guard at the top of the screen
+Every fetching screen handles all three. The guards double as type narrowing — past them,
+`data` is defined and non-empty.
 
 ```tsx
 export function FeedScreen() {
@@ -245,40 +205,18 @@ export function FeedScreen() {
   if (error) return <ErrorMessage message="Couldn't load feed" onRetry={refetch} />;
   if (!data?.length) return <EmptyState message="No posts yet" />;
 
-  // Happy path below — `data` is guaranteed non-null and non-empty
-  return (/* ... */);
+  return (/* happy path — `data` is guaranteed non-null and non-empty */);
 }
 ```
 
-This pattern narrows the type: after the three guards, TypeScript knows `data` is defined
-and non-empty. No optional chaining needed in the happy path.
-
-### Variant: Single-entity screens (detail/profile views)
-
-For screens that load one entity by ID (not a list), replace the empty state check with a
-null/not-found guard:
+**Single-entity screens** (detail, profile) swap the empty check for a not-found check, since a
+missing entity is an error rather than an empty collection:
 
 ```tsx
-export function UserProfileScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const { data: user, isLoading, error, refetch } = useUserProfile(id);
-
-  if (isLoading) return <LoadingSpinner />;
-  if (error) return <ErrorMessage message="Couldn't load profile" onRetry={refetch} />;
-  if (!user) return <ErrorMessage message="User not found" />;
-
-  // Happy path — `user` is guaranteed non-null
-  return (/* ... */);
-}
+if (!user) return <ErrorMessage message="User not found" />;
 ```
 
-The difference: list screens check `!data?.length` (empty list), single-entity screens check
-`!data` (entity doesn't exist). Don't use `EmptyState` for a missing entity — use `ErrorMessage`
-with a descriptive message.
-
-### Standard UI components for these states
-
-Create these once in `src/components/ui/` and reuse everywhere:
+Three shared components in `src/components/ui/` cover every screen:
 
 | Component | Props | Purpose |
 |-----------|-------|---------|
@@ -286,15 +224,15 @@ Create these once in `src/components/ui/` and reuse everywhere:
 | `ErrorMessage` | `message`, `onRetry?` | Error text + retry button |
 | `EmptyState` | `message`, `action?` | Illustration + message + optional CTA |
 
-CC will skip the empty state component. It will render nothing or a blank screen when the
-list is empty. Always include it.
+CC reliably omits the empty branch and ships a blank screen for an empty list. The empty branch
+is the one to check first in review.
 
 ---
 
 ## List Rendering
 
-For any list longer than ~20 items, use `FlashList` (from `@shopify/flash-list`) instead
-of `FlatList`. It's a drop-in replacement with significantly better scroll performance.
+Lists past ~20 items use `FlashList` (`@shopify/flash-list`) instead of `FlatList` — a drop-in
+replacement with materially better scroll performance.
 
 ```tsx
 import { FlashList } from '@shopify/flash-list';
@@ -302,41 +240,35 @@ import { FlashList } from '@shopify/flash-list';
 <FlashList
   data={posts}
   renderItem={({ item }) => <PostCard post={item} />}
-  estimatedItemSize={120}  // Required — estimate average item height in px
   keyExtractor={(item) => item.id}
 />
 ```
 
-**List rules:**
-- Always provide `keyExtractor` with a stable unique ID (not array index)
-- Always set `estimatedItemSize` for FlashList — it won't work well without it
-- For pull-to-refresh: use `refreshing` + `onRefresh` props, wire to TanStack Query's `refetch`
-- For pagination: use TanStack Query's `useInfiniteQuery` + `onEndReached`
+**Version note:** FlashList v2 (bundled from SDK 54 onward) measures items itself — there is no
+`estimatedItemSize` prop, and passing one is dead config. On FlashList v1 `estimatedItemSize` is
+required for the list to perform at all. Check the installed major version before copying an
+example from the web.
+
+`keyExtractor` takes a stable unique ID. Pull-to-refresh wires `refreshing`/`onRefresh` to
+TanStack Query's `refetch`; pagination uses `useInfiniteQuery` + `onEndReached` (see
+`references/data-hooks.md`).
 
 ---
 
 ## TypeScript Conventions
 
-### Props interfaces
-
-Every component gets a named `Props` interface, not inline types.
+Every component takes a named `Props` interface:
 
 ```tsx
-// GOOD
 interface PostCardProps {
   post: Post;
   onPress?: (id: string) => void;
 }
 
 export function PostCard({ post, onPress }: PostCardProps) { /* ... */ }
-
-// BAD — inline, unnamed, hard to export or extend
-export function PostCard({ post, onPress }: { post: Post; onPress?: (id: string) => void }) {}
 ```
 
-### Shared types (`src/types/`)
-
-One file per domain entity. Export interfaces, not types (unless you need a union).
+Shared types live in `src/types/`, one file per domain entity:
 
 ```tsx
 // src/types/post.ts
@@ -355,106 +287,29 @@ export interface CreatePostInput {
 ```
 
 **Type rules:**
-- IDs are `string` (even if the backend uses numbers — it's safer for React keys)
-- Dates are `string` (ISO 8601 from the API). Parse to Date objects only at display time.
-- Never use `any`. If you don't know the type, use `unknown` and narrow it.
-- Never use `enum`. Use string union types: `type Status = 'active' | 'archived'`.
+- IDs are `string`, even when the backend uses numbers — safer as React keys.
+- Dates are `string` (ISO 8601 from the API), parsed to `Date` at display time only.
+- Unknown shapes are typed `unknown` and narrowed at the boundary. `any` is banned outright.
+- Status-like values are string unions (`type Status = 'active' | 'archived'`), not `enum`.
+- Interfaces over type aliases, except for unions.
 
 ---
 
-## Performance Basics
+## Performance
 
-Don't optimize prematurely, but don't ignore these free wins:
+Two free wins are worth taking by default:
 
-### `React.memo` — Use for list item components
+- **`memo` every component rendered inside a `FlashList`/`FlatList` `renderItem`.** Screen
+  components and always-new-props components stay unmemoized.
+- **`useCallback` any function passed to a memoized child** — otherwise the new function
+  reference defeats the memo entirely.
 
-```tsx
-import { memo } from 'react';
+Beyond those two, measure before changing anything: `performance-profiling-protocol` owns the
+budgets (16ms per render commit, 100ms tap-to-feedback) and the profiling workflow.
 
-interface PostCardProps {
-  post: Post;
-  onPress?: (id: string) => void;
-}
-
-export const PostCard = memo(function PostCard({ post, onPress }: PostCardProps) {
-  return (/* ... */);
-});
-```
-
-Wrap any component rendered inside a `FlashList` or `FlatList` `renderItem`. Don't wrap
-screen components or components that always receive new props.
-
-### `useCallback` — Use for callbacks passed to memoized children
-
-```tsx
-// In the parent screen
-const handlePress = useCallback((id: string) => {
-  router.push(`/post/${id}`);
-}, []);
-```
-
-If you pass a function to a `memo`-wrapped child, wrap it in `useCallback` or the memo
-is useless (new function reference every render).
-
-### `useMemo` — Use for expensive computations
-
-```tsx
-const filteredPosts = useMemo(
-  () => posts.filter((p) => p.author.id !== blockedUserId),
-  [posts, blockedUserId]
-);
-```
-
-Don't use `useMemo` for simple lookups, string concatenation, or single property access. Use it
-for filtering, sorting, or transforming arrays — these are the most common valid use cases in
-screens with lists. Rule of thumb: if the operation iterates over an array or involves `.filter()`,
-`.map()`, `.sort()`, or `.reduce()`, wrap it in `useMemo`.
-
-### What NOT to optimize
-
-- Don't memoize everything — it adds complexity and memory overhead
-- Don't use `useCallback` for handlers that aren't passed to `memo` children
-- Don't split components just for performance — split for readability first
-
----
-
-## Common Footguns
-
-Things CC gets wrong at the component level:
-
-1. **God components.** A 300-line component that fetches data, manages local state, handles
-   navigation, and renders complex UI. Split it: data → hook, sub-sections → components.
-
-2. **`useEffect` for data fetching.** Always use TanStack Query. The only valid `useEffect`
-   in a screen is for one-time setup (loading fonts, checking auth, subscribing to
-   app state changes).
-
-3. **Inline styles everywhere.** Whether using NativeWind or StyleSheet, keep styles
-   consistent. Don't mix `style={{ padding: 16 }}` with className or StyleSheet refs in the
-   same component.
-
-4. **Missing `key` prop or using array index.** Always use a stable unique ID. Array index
-   causes bugs when list items are reordered, inserted, or deleted.
-
-5. **Calling `router.push` inside `useEffect`.** Navigation side effects should happen in
-   event handlers or the root index redirect. Not in `useEffect` — it causes race conditions
-   and double-navigation.
-
-6. **Ignoring the empty state.** CC renders a blank screen when the list is empty. Always
-   handle `data.length === 0` explicitly.
-
-7. **Prop drilling through 3+ levels.** If a prop passes through components that don't use
-   it, either lift the hook call closer to where the data is needed, or use a Zustand store
-   for shared UI state.
-
-8. **Creating a new Zustand store for every piece of state.** Use `useState` for
-   single-component state. Zustand is for state shared across multiple screens.
-
-9. **Forgetting `enabled` on conditional queries.** If a query depends on a value that might
-   be null (like a route param), use `enabled: !!value` to prevent unnecessary requests.
-
-10. **Not typing API responses.** CC will use `any` or leave the type inferred as `unknown`
-    from `response.json()`. Always type the query function's return type explicitly.
+**Read `references/performance.md`** when a screen is actually slow, or when deciding whether a
+computation deserves `useMemo` — it holds the `useMemo` threshold rule and the list of
+optimizations that cost more than they return.
 
 ---
 
@@ -467,24 +322,35 @@ Things CC gets wrong at the component level:
 | UI components | PascalCase | `PostCard.tsx`, `Button.tsx` |
 | Hooks | camelCase with `use` prefix | `useWorkouts.ts`, `useDebounce.ts` |
 | Stores | camelCase with `use` + `Store` suffix | `useAuthStore.ts` |
-| Types | PascalCase, one file per entity | `workout.ts` (exports `Workout`, `CreateWorkoutInput`) |
+| Types | PascalCase entity, one file per entity | `workout.ts` (exports `Workout`, `CreateWorkoutInput`) |
 | Constants | camelCase file, UPPER_SNAKE values | `theme.ts` → `export const SPACING_SM = 8` |
+
+Styling stays consistent within a component: either NativeWind classes throughout or
+`StyleSheet` refs throughout, not both plus inline objects.
 
 ---
 
 ## Checklist: Is the Component Well-Structured?
 
-Use this when reviewing a screen or feature component:
+Enumerate **every screen and component the change adds or edits**, then walk the rows for each
+one. The review is done when every item on that list has been checked — not when the diff has
+been skimmed.
 
-- [ ] Route file is a thin re-export (no hooks, no JSX beyond default export)
+- [ ] Route file is a one-line re-export
 - [ ] Screen component is under 150 lines
-- [ ] All API data comes from TanStack Query hooks, not `useEffect` + `useState`
-- [ ] Loading, error, and empty states are all handled explicitly
-- [ ] Local state that's only used in one component uses `useState`, not Zustand
-- [ ] Shared state across screens uses Zustand, not prop drilling
-- [ ] Derived state uses `useMemo`, not a separate `useState`
-- [ ] List rendering uses FlashList with `estimatedItemSize` and stable `keyExtractor`
-- [ ] Props interface is named and exported, not inline
-- [ ] No `any` types — all API responses are explicitly typed
-- [ ] Callbacks passed to memoized children are wrapped in `useCallback`
-- [ ] No navigation calls inside `useEffect`
+- [ ] All API data comes from TanStack Query hooks
+- [ ] Loading, error, and empty branches all present (empty first — it is the one CC skips)
+- [ ] Single-component state uses `useState`; cross-screen state uses Zustand
+- [ ] Derived values use `useMemo` over stored duplicates
+- [ ] Lists use FlashList with a stable `keyExtractor`
+- [ ] Props interface is named
+- [ ] No `any` — query functions declare their return type
+- [ ] Callbacks passed to memoized children use `useCallback`
+- [ ] Navigation happens in event handlers, not `useEffect`
+
+**If every row passes, say so and stop** — "structure is sound, no changes needed" is a valid
+outcome, and manufacturing a marginal refactor to look thorough costs more than it returns.
+
+Related: `code-review-checklist` for correctness and security on the same diff,
+`test-strategy-planner` for what to cover once the structure is settled, `rn-platform-gotchas`
+for iOS/Android behavior of the components involved.
