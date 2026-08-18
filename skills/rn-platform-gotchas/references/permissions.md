@@ -1,13 +1,13 @@
 # Permissions Deep Reference
 
-Loaded by `rn-platform-gotchas` when implementing permission flows.
+Loaded by `rn-platform-gotchas` when implementing any permission flow.
 
 ---
 
 ## Request at Point of Use
 
-Never request all permissions at app startup. Request each permission right before the
-feature that needs it. Users deny blanket permission requests.
+Request each permission immediately before the feature that needs it. Blanket startup prompts
+get denied, and a denial is close to permanent (see below).
 
 ```tsx
 import * as ImagePicker from 'expo-image-picker';
@@ -41,28 +41,35 @@ async function pickImage() {
 
 ## Common Expo Permissions
 
-| Feature | Expo Package | iOS Info.plist key | Android permission |
+| Feature | Expo package | iOS Info.plist key | Android permission |
 |---------|-------------|-------------------|-------------------|
 | Camera | `expo-camera` | `NSCameraUsageDescription` | `CAMERA` |
 | Photo library | `expo-image-picker` | `NSPhotoLibraryUsageDescription` | `READ_MEDIA_IMAGES` (API 33+) |
 | Location | `expo-location` | `NSLocationWhenInUseUsageDescription` | `ACCESS_FINE_LOCATION` |
-| Notifications | `expo-notifications` | Automatic via config plugin | `POST_NOTIFICATIONS` (API 33+) |
+| Notifications | `expo-notifications` | Automatic via config plugin | `POST_NOTIFICATIONS` (API 33+), plus a notification channel on Android 8+ |
 | Microphone | `expo-audio` | `NSMicrophoneUsageDescription` | `RECORD_AUDIO` |
 | Contacts | `expo-contacts` | `NSContactsUsageDescription` | `READ_CONTACTS` |
 
-## Platform Differences in Permission Flow
+**Notifications on Android:** creating a notification channel is not optional. Without one,
+Android 8+ drops notifications silently — no error, no delivery.
 
-- **iOS:** Shows a system dialog once. If denied, can't re-prompt — must send user to
-  Settings via `Linking.openSettings()`.
-- **Android:** Shows a system dialog. If denied twice, Android marks it as "permanently
-  denied" — `shouldShowRequestRationale` returns `false`. Handle with `Linking.openSettings()`.
-- **Android 13+ (API 33):** Granular media permissions (`READ_MEDIA_IMAGES`,
-  `READ_MEDIA_VIDEO`, `READ_MEDIA_AUDIO`) replace the blanket `READ_EXTERNAL_STORAGE`.
+## Platform Differences in the Denial Flow
+
+- **iOS:** the system dialog shows once. After a denial there is no re-prompt — every later
+  `request*Async()` resolves to `denied` immediately. Recovery is `Linking.openSettings()`.
+- **Android:** after two denials the permission is permanently denied and
+  `shouldShowRequestRationale` returns `false`. Same recovery path.
+- **Android 13+ (API 33):** granular media permissions (`READ_MEDIA_IMAGES`, `READ_MEDIA_VIDEO`,
+  `READ_MEDIA_AUDIO`) replace the blanket `READ_EXTERNAL_STORAGE`. Request only the media type
+  the feature uses.
+
+Because both platforms reach a no-more-dialogs state, call `get*PermissionsAsync()` to read the
+current status before requesting, and give every denial path a Settings button.
 
 ## Config Plugin Setup
 
-Most Expo packages add required permissions via config plugins automatically. Add them in
-`app.json`:
+Expo config plugins generate the plist and manifest entries during `npx expo prebuild` — these
+files are rarely edited by hand. Declare the plugins in `app.json`:
 
 ```json
 {
@@ -75,6 +82,6 @@ Most Expo packages add required permissions via config plugins automatically. Ad
 }
 ```
 
-The string you provide becomes the permission dialog text on iOS and the rationale text
-on Android. Always write a specific reason — "this app needs camera access" is worse than
-"we need camera access to scan barcodes."
+The string becomes the iOS permission dialog text and the Android rationale text. Name the
+concrete feature: "we need camera access to scan barcodes" earns grants that "this app needs
+camera access" does not, and App Review rejects vague purpose strings.
