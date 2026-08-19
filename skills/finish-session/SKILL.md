@@ -17,8 +17,12 @@ counterpart to `agent-session` (which *starts* a session).
 
 ## What it does
 
-1. Verifies you're on a feature branch with a clean tree and commits ahead of
-   `main`.
+1. Fetches `origin`, then verifies you're on a feature branch with a clean tree
+   and commits ahead of **`origin/main`** — not local `main`. Without the fetch
+   a stale local base put a teammate's already-merged commits in the PR body,
+   and a missing local base made it refuse to land real work claiming there was
+   nothing to land. If `origin` is unreachable it warns and falls back to
+   whatever refs are local.
 2. Pushes the branch (never force) and opens a PR if one doesn't exist, deriving
    the title from the branch topic and the body from the commit list.
 3. Verifies branch protection on the base branch requires the `scripts-check`
