@@ -25,10 +25,11 @@ Confirm with the user, since this creates a real GitHub repo:
 - **Stack** — free-form string; seeds a quickstart section in `CLAUDE.md`
 - **Description** — one line, used in the README
 
-The script checks its own preconditions — `git`, `sed`, `date`, a global
-`user.email`, and (unless `--no-remote`) that `gh` is authenticated — **before**
-it creates anything, so a failure leaves no directory behind. If something does
-fail partway through, it removes the partial tree so the retry works.
+The script checks its own preconditions — `git`, `sed`, `date`, and (unless
+`--no-remote`) that `gh` is authenticated — **before** it creates anything, so a
+failure leaves no directory behind. A missing global `user.email` is a warning,
+not an error, since git falls back to `user@hostname`. If something does fail
+partway through, it removes the partial tree so the retry works.
 
 ## Running it
 

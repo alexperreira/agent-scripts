@@ -264,11 +264,16 @@ TEMPLATE_DIR="${SCRIPT_DIR}/../templates/empty"
 
 [[ ! -e "$TARGET_DIR" ]] || die "target already exists: $TARGET_DIR"
 
-# `git commit` below needs an identity, and it will not inherit one from this
-# repo — the new project is a separate tree.
+# `git commit` below will not inherit an identity from this repo — the new
+# project is a separate tree. Advisory rather than fatal: git falls back to
+# user@hostname (with a warning) unless user.useConfigOnly is set, so an unset
+# user.email does not reliably mean the commit will fail. If it does fail, the
+# cleanup trap below removes the partial tree, which is the outcome finding 5
+# was actually about.
 if ! git config --global --get user.email >/dev/null 2>&1 \
    && ! git config --system --get user.email >/dev/null 2>&1; then
-  die "git user.email is not set globally; run: git config --global user.email <you@example.com>"
+  warn "no global git user.email; the initial commit will use git's fallback identity."
+  warn "set one with: git config --global user.email <you@example.com>"
 fi
 
 if [[ "$CREATE_REMOTE" == "true" ]]; then
@@ -285,7 +290,7 @@ if [[ "$DRY_RUN" == "true" ]]; then
   else
     echo "[dry-run] Skipping GitHub remote creation"
   fi
-  echo "[dry-run] Preconditions checked: git identity${CREATE_REMOTE:+, gh auth}, templates, free target path"
+  echo "[dry-run] Preconditions checked: tooling, templates, free target path, gh auth (unless --no-remote)"
   exit 0
 fi
 
