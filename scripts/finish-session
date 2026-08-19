@@ -187,7 +187,13 @@ run git pull --ff-only
 # refuses. Under set -e that killed the script *after* the PR had merged and
 # the remote branch was gone — a successful land reported as a failure.
 # Force-delete only when the wait loop actually observed state == MERGED.
-if ! run git branch -d "$BRANCH"; then
+# `gh pr merge --delete-branch` already removes the local branch when it can,
+# so by this point there is often nothing left to delete. Both -d and -D then
+# fail with "branch not found" and set -e turns a clean land into exit 1 —
+# the same false failure this block exists to prevent.
+if ! git show-ref --verify --quiet "refs/heads/${BRANCH}"; then
+  echo "Local branch ${BRANCH} was already removed."
+elif ! run git branch -d "$BRANCH"; then
   [[ "$MERGE_CONFIRMED" == true ]] || die \
     "could not delete ${BRANCH} and its merge was never confirmed — leaving it in place"
   warn "squash merge leaves ${BRANCH} unmerged by ancestry; PR is MERGED, deleting"
