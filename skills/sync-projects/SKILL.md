@@ -39,6 +39,10 @@ Repos live on `/mnt/c` so Cowork can see them. Pointing this at `~/Projects`
 clones a **second** copy of every repo onto ext4 — two working trees per
 project, both reporting clean, drifting apart silently.
 
+`/mnt/c` is case-insensitive, so two registry slugs whose repo names differ only
+in case share one directory. The script warns up front and refuses to touch a
+directory whose `origin` does not match the slug.
+
 ## What it will not do
 
 The script is deliberately conservative and **skips with a warning** rather than
@@ -49,7 +53,9 @@ touching a repo when any of these hold:
 - history has diverged from the remote
 - detached HEAD, or no remote-tracking branch
 - the target path exists but is not a git repo
-- `git fetch` failed (offline, auth, or a stale `.git/index.lock`)
+- a stale `.git/index.lock` is present (a git process died there)
+- the directory's `origin` is a different repo than the registry entry names
+- `git fetch` failed (offline or auth)
 
 A **skip** is not an **error**: skips are reported and the run continues at exit
 0. A failed clone or a failed `git pull --ff-only` is an error and sets a
