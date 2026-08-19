@@ -21,9 +21,14 @@ counterpart to `agent-session` (which *starts* a session).
    `main`.
 2. Pushes the branch (never force) and opens a PR if one doesn't exist, deriving
    the title from the branch topic and the body from the commit list.
-3. Enables merge-when-green via `gh pr merge --auto --squash --delete-branch`.
-   This relies on branch protection requiring the `scripts-check` check, so a red
-   PR cannot merge.
+3. Verifies branch protection on the base branch requires the `scripts-check`
+   check, and **refuses to auto-merge if it does not** — `--auto` on an
+   unprotected branch merges as soon as the PR is mergeable, which means
+   immediately, with CI irrelevant. Only then does it enable merge-when-green
+   via `gh pr merge --auto --squash --delete-branch`.
+
+   If it refuses, the branch genuinely isn't protected. Either land it manually
+   after checking CI (`--no-merge`), or add the ruleset — do not work around it.
 4. By default **waits** until the PR merges, then deletes the local branch — so
    it feels like one synchronous "land". `--no-wait` returns immediately after
    enabling auto-merge.
@@ -49,5 +54,10 @@ Override title/body/base/strategy with `--title`, `--body`, `--base`,
 
 ## Low-privilege
 
-Never force-pushes, never deletes an unmerged branch (`git branch -d` only), and
-makes no admin/branch-protection API calls.
+Never force-pushes. It reads branch protection (see step 3) but never changes
+it, and makes no other admin API calls.
+
+Local branch deletion is `git branch -d`. A squash merge — the default — leaves
+the branch unmerged *by ancestry*, so `-d` always refuses; the script falls back
+to `git branch -D` **only** after the wait loop observed the PR in state
+`MERGED`. On any other path the branch is left in place.

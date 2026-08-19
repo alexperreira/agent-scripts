@@ -1,0 +1,9 @@
+# This repo is checked out on /mnt/c and edited from both WSL and Windows.
+# A CRLF that reaches a script makes it unrunnable ("bad interpreter: ^M") and
+# breaks every `head -n 1 ... == "---"` frontmatter test, so normalise on the
+# way in and always check out LF.
+* text=auto eol=lf
+
+# Scripts are never anything but LF, regardless of content sniffing.
+scripts/** text eol=lf
+*.sh text eol=lf

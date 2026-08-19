@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# -P / pwd -P resolve symlinks physically. ~/scripts is a symlink into this
+# repo, so bash's logical `cd ..` would make REPO_ROOT the parent of the
+# *symlink* ($HOME) rather than the repo — which turns every link check into
+# `~/CLAUDE.md -> ~/CLAUDE.md`, a tautology that always prints "ok:".
+SCRIPT_DIR="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 # shellcheck source=lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
 
@@ -52,10 +56,15 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$REPO_ROOT" ]]; then
-  REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+  REPO_ROOT="$(cd -P -- "${SCRIPT_DIR}/.." && pwd -P)"
 else
-  REPO_ROOT="$(cd "$REPO_ROOT" && pwd)"
+  REPO_ROOT="$(cd -P -- "$REPO_ROOT" && pwd -P)" || die "cannot resolve --repo path"
 fi
+
+# If REPO_ROOT resolved to $HOME every link below becomes `X -> X`: link_one
+# resolves both sides, finds them equal, and prints "ok:" without validating
+# anything. Fail loudly instead of silently validating nothing.
+[[ "$REPO_ROOT" != "$HOME" ]] || die "refusing to link \$HOME to itself (REPO_ROOT resolved to ${HOME})"
 
 [[ -f "${REPO_ROOT}/CLAUDE.md" ]] || die "missing ${REPO_ROOT}/CLAUDE.md"
 [[ -d "${REPO_ROOT}/scripts" ]] || die "missing ${REPO_ROOT}/scripts"
@@ -140,6 +149,36 @@ if [[ "$DO_CODEX_SKILLS" == "true" ]]; then
       skill_name="$(basename "$skill_dir")"
       link_one "${SKILLS_SRC}/${skill_name}" "${CODEX_SKILLS}/${skill_name}"
     done
+  fi
+fi
+
+# ── Unowned Claude skill links (report only) ──────────────────────────────────
+# Claude Code loads this repo's skills as a plugin, so ~/.claude/skills is not
+# managed here. Something else has been writing symlinks into it anyway — some
+# into this repo, some elsewhere (e.g. ~/.agents/skills). Neither is wrong, but
+# an unlisted symlink into $HOME is exactly the kind of state that stops being
+# noticed. Report; never delete or relink.
+CLAUDE_SKILLS="${HOME}/.claude/skills"
+if [[ -d "$CLAUDE_SKILLS" ]]; then
+  declare -a owned=() unowned=()
+  for entry in "${CLAUDE_SKILLS}"/*; do
+    [[ -L "$entry" ]] || continue
+    resolved="$(readlink -f "$entry" || true)"
+    if [[ -n "$resolved" && "$resolved" == "${SKILLS_SRC}/"* ]]; then
+      owned+=("$entry")
+    else
+      unowned+=("$(basename "$entry") -> $(readlink "$entry")")
+    fi
+  done
+
+  if (( ${#owned[@]} + ${#unowned[@]} > 0 )); then
+    echo
+    echo "note: ${CLAUDE_SKILLS} holds ${#owned[@]} symlink(s) into this repo and ${#unowned[@]} from elsewhere."
+    echo "      This script does not manage that directory (Claude Code loads skills as a plugin)."
+    if (( ${#unowned[@]} > 0 )); then
+      echo "      Not owned by this repo:"
+      printf '        %s\n' "${unowned[@]}"
+    fi
   fi
 fi
 

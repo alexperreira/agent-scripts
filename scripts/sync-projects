@@ -68,6 +68,9 @@ uptodate=0
 skipped=0
 errors=0
 
+# sync_repo is called as `sync_repo ... || ...`, which disables `set -e` for the
+# whole function body. Every command that can fail must therefore be checked
+# explicitly — a bare failing command here falls through and returns 0.
 sync_repo() {
   local slug="$1"          # owner/repo
   local repo_name="${slug##*/}"
@@ -79,16 +82,24 @@ sync_repo() {
   # ── Clone if missing ────────────────────────────────────────────────────────
   if [[ ! -e "$target" ]]; then
     echo "   → cloning into ${target}"
-    run git clone "${clone_url}" "${target}"
+    if [[ "$DRY_RUN" == "true" ]]; then
+      echo "   [dry-run] git clone ${clone_url} ${target}"
+      (( cloned++ )) || true
+      return 0
+    fi
+    if ! git clone "${clone_url}" "${target}"; then
+      echo "   ⚠ ERROR: clone failed: ${slug}" >&2
+      return 1
+    fi
     (( cloned++ )) || true
-    return
+    return 0
   fi
 
   # ── Existing directory checks ────────────────────────────────────────────────
   if [[ ! -d "${target}/.git" ]]; then
     echo "   ⚠ WARNING: ${target} exists but is not a git repo — skipping" >&2
     (( skipped++ )) || true
-    return
+    return 0
   fi
 
   # Detect current branch
@@ -97,23 +108,23 @@ sync_repo() {
   if [[ -z "$branch" ]]; then
     echo "   ⚠ WARNING: ${target} is in detached HEAD state — skipping" >&2
     (( skipped++ )) || true
-    return
+    return 0
   fi
 
   # Check for uncommitted changes (tracked files only)
   if ! git -C "$target" diff --quiet || ! git -C "$target" diff --cached --quiet; then
     echo "   ⚠ WARNING: ${target} has uncommitted changes — skipping pull" >&2
     (( skipped++ )) || true
-    return
+    return 0
   fi
 
-  # Fetch so we have up-to-date remote refs
-  if [[ "$DRY_RUN" != "true" ]]; then
-    git -C "$target" fetch --quiet origin 2>/dev/null || {
-      echo "   ⚠ WARNING: fetch failed for ${target} — skipping" >&2
-      (( skipped++ )) || true
-      return
-    }
+  # Fetch so we have up-to-date remote refs. Read-only, so it runs in dry-run
+  # too: without it the preview reports "already up to date" for every repo
+  # that is actually behind.
+  if ! git -C "$target" fetch --quiet origin 2>/dev/null; then
+    echo "   ⚠ WARNING: fetch failed for ${target} — skipping" >&2
+    (( skipped++ )) || true
+    return 0
   fi
 
   # Check if remote tracking branch exists
@@ -121,43 +132,58 @@ sync_repo() {
   if ! git -C "$target" rev-parse --verify "${remote_ref}" >/dev/null 2>&1; then
     echo "   ⚠ WARNING: no remote tracking branch '${remote_ref}' — skipping pull" >&2
     (( skipped++ )) || true
-    return
+    return 0
   fi
 
   # Compare local vs remote
+  # Unguarded command substitutions would leave these empty on failure, and an
+  # empty SHA compares unequal to everything — the repo would be misreported as
+  # diverged rather than errored.
   local local_sha remote_sha merge_base
-  local_sha=$(git -C "$target" rev-parse HEAD)
-  remote_sha=$(git -C "$target" rev-parse "${remote_ref}")
-  merge_base=$(git -C "$target" merge-base HEAD "${remote_ref}")
+  local_sha=$(git -C "$target" rev-parse HEAD) || {
+    echo "   ⚠ ERROR: cannot resolve HEAD in ${target}" >&2; return 1; }
+  remote_sha=$(git -C "$target" rev-parse "${remote_ref}") || {
+    echo "   ⚠ ERROR: cannot resolve ${remote_ref} in ${target}" >&2; return 1; }
+  merge_base=$(git -C "$target" merge-base HEAD "${remote_ref}") || {
+    echo "   ⚠ ERROR: no common ancestor between HEAD and ${remote_ref} in ${target}" >&2; return 1; }
 
   if [[ "$local_sha" == "$remote_sha" ]]; then
     echo "   ✓ already up to date"
     (( uptodate++ )) || true
-    return
+    return 0
   fi
 
   if [[ "$merge_base" == "$remote_sha" ]]; then
     # Local is ahead of remote (remote hasn't seen our commits)
     local ahead
-    ahead=$(git -C "$target" rev-list --count "${remote_ref}..HEAD")
+    ahead=$(git -C "$target" rev-list --count "${remote_ref}..HEAD") || ahead="?"
     echo "   ⚠ WARNING: local '${branch}' is ${ahead} commit(s) ahead of remote — skipping pull" >&2
     echo "             Push or PR from ${target} to sync." >&2
     (( skipped++ )) || true
-    return
+    return 0
   fi
 
   if [[ "$merge_base" == "$local_sha" ]]; then
     # Fast-forward available
     echo "   → pulling ${branch}"
-    run git -C "$target" pull --ff-only --quiet origin "${branch}"
+    if [[ "$DRY_RUN" == "true" ]]; then
+      echo "   [dry-run] git -C ${target} pull --ff-only --quiet origin ${branch}"
+      (( pulled++ )) || true
+      return 0
+    fi
+    if ! git -C "$target" pull --ff-only --quiet origin "${branch}"; then
+      echo "   ⚠ ERROR: pull failed: ${target}" >&2
+      return 1
+    fi
     (( pulled++ )) || true
-    return
+    return 0
   fi
 
   # Diverged
   echo "   ⚠ WARNING: ${target} has diverged from remote — skipping pull" >&2
   echo "             Resolve manually: cd ${target} && git status" >&2
   (( skipped++ )) || true
+  return 0
 }
 
 echo "Registry: ${REGISTRY}"
@@ -165,7 +191,9 @@ echo "Projects: ${PROJECTS_DIR}"
 [[ "$DRY_RUN" == "true" ]] && echo "Mode:     dry-run"
 echo
 
-while IFS= read -r line; do
+# `|| [[ -n "$line" ]]` keeps the last entry when the registry has no trailing
+# newline — otherwise read returns non-zero and that repo is silently dropped.
+while IFS= read -r line || [[ -n "$line" ]]; do
   # Strip comments and blank lines
   line="${line%%#*}"
   line="${line//[[:space:]]/}"

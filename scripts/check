@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+# -P / pwd -P resolve symlinks physically. ~/scripts is a symlink into this
+# repo, so bash's logical `cd ..` would make REPO_ROOT the parent of the
+# *symlink* ($HOME) rather than the repo.
+SCRIPT_DIR="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+REPO_ROOT="$(cd -P -- "${SCRIPT_DIR}/.." && pwd -P)"
 # shellcheck source=lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
 
@@ -47,6 +50,32 @@ expect_fail_contains() {
   [[ "$output" == *"$needle"* ]] || die "unexpected error output for: $*"
 }
 
+# ── Line endings ───────────────────────────────────────────────────────────────
+# This runs before discovery on purpose. A CRLF shebang makes a script
+# unrunnable while still matching the `^#!.*bash` discovery regex below, so
+# without this gate `check` reports success on a tree where nothing executes.
+echo "==> Line endings"
+if crlf_files="$(grep -rlU $'\r$' "${REPO_ROOT}/scripts" "${REPO_ROOT}/skills" 2>/dev/null)"; then
+  printf '%s\n' "$crlf_files" | sed "s|^${REPO_ROOT}/||" >&2
+  die "CRLF line endings found (see .gitattributes; a CRLF shebang breaks every script)"
+fi
+echo "    all LF"
+
+# ── Executable bit, as recorded in the git index ───────────────────────────────
+# `[[ -x ]]` is meaningless here: /mnt/c without the `metadata` mount option
+# reports a uniform mode for every file, so the test passes unconditionally.
+# core.fileMode is false, so git also ignores real chmods. The index is the only
+# place the mode is real — and the only one a fresh clone on ext4 will honour.
+echo "==> Executable bit in the git index"
+if git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+  not_exec="$(git -C "$REPO_ROOT" ls-files --stage -- scripts \
+    | awk '$1!="100755" && $4!~"/lib/" {print $4}')"
+  [[ -z "$not_exec" ]] || die "not executable in git index: ${not_exec}"
+  echo "    all scripts/ entries are 100755"
+else
+  echo "note: not a git repo; skipping index mode check"
+fi
+
 # ── Discover every bash script under scripts/ ──────────────────────────────────
 declare -a BASH_FILES=()
 while IFS= read -r -d '' file; do
@@ -71,7 +100,8 @@ echo "==> CLI help smoke checks"
 for file in "${BASH_FILES[@]}"; do
   # Library files are sourced, not invoked.
   [[ "$file" == "${SCRIPT_DIR}/lib/"* ]] && continue
-  [[ -x "$file" ]] || die "not executable: ${file#"${REPO_ROOT}"/}"
+  # No `[[ -x ]]` here — see the git index check above for why it proves nothing
+  # on /mnt/c. A genuinely non-executable file fails the invocation below.
   "$file" --help >/dev/null || die "--help failed: ${file#"${REPO_ROOT}"/}"
 done
 
