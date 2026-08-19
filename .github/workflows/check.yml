@@ -13,10 +13,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install shellcheck
+      # shellcheck ships preinstalled on ubuntu-latest, so the apt path is a
+      # fallback only. `apt-get update` hung for 10+ minutes repeatedly against
+      # a flaky mirror, wedging the required check with a runner already
+      # assigned; timeout-minutes bounds that instead of blocking a land.
+      - name: Ensure shellcheck
+        timeout-minutes: 5
         run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y shellcheck
+          fi
+          shellcheck --version
 
       - name: Run local checks
         run: scripts/check --require-shellcheck

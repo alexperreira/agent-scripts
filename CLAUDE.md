@@ -11,14 +11,20 @@ This file is intended to be reusable across projects. Individual repos can add m
 ## Environment (WSL-first)
 
 - Primary setup: Windows host + WSL2 Ubuntu.
-- Work exclusively inside WSL unless explicitly requested otherwise.
-- Windows filesystem access is via `/mnt/c/...` (commonly `/mnt/c/Users/alexa/Downloads`, etc.).
+- Run commands from the WSL shell; that is the working environment.
+- **Repos live on the Windows filesystem**, under `/mnt/c/Users/alexa/Projects`,
+  so that Windows-side tools (Cowork, editors) can see them. This is a
+  deliberate trade of some filesystem speed for visibility — see
+  `docs/adr/0001-filesystem-split-and-git-boundary.md`. Do not propose moving a
+  repo back onto ext4 for performance.
+- Other Windows paths are reachable the same way (e.g. `/mnt/c/Users/alexa/Downloads`).
 
 ## Scope & Search Roots
 
 Paths I may freely read without asking:
 
 - Current repo/working directory
+- `/mnt/c/Users/alexa/Projects/**` — where the repos actually live
 - `~/Projects/**`, `/tmp/**`, `~/scripts/**`, `~/templates/**`
 - `/mnt/c/Users/alexa/Downloads/**`
 
@@ -26,13 +32,19 @@ Ask before accessing:
 
 - `~/Documents/**`, other home directories, external mounts
 
+`/mnt/c/Users/alexa/Projects` and `/mnt/c/Users/alexa/Downloads` are listed
+above as freely readable; "external mounts" here means anything *else* under
+`/mnt`. Never stop to ask before reading Alex's own code.
+
 Never access (unless explicitly instructed with clear reason):
 
 - `~/.ssh/**`, `~/.gnupg/**`, password managers, browser profiles, cloud credentials
 
 ## Orchestration Context
 
-This file lives at the WSL root level (`~/CLAUDE.md`) and is primarily used for:
+This file lives in the `agent-scripts` repo and is surfaced at `~/CLAUDE.md`
+by a symlink (`bootstrap-home-links`). Edit it here, never at `~`. It is
+primarily used for:
 
 - Bootstrapping new projects via `~/scripts/new-project`
 - Cross-project tasks and automation
@@ -124,6 +136,10 @@ approval before touching any files.
   - Examples: `rm`, `rmdir`, `del`, `git reset --hard`, `git clean`, `git restore`, `mkfs`, `dd`.
 - Prefer reversible actions (create new files, additive config) over destructive ones.
 - If a task appears to require deletion to “fix lint/type errors”, stop and ask first.
+- The destructive-operations rule above governs **what an agent runs**, not what
+  the repo's own scripts contain. A checked-in script removing a directory it
+  created itself in the same run (`trap 'rm -rf "$TMP"' EXIT` after its own
+  `mktemp -d`) is correct cleanup, not a violation — don't flag it as one.
 
 ## Collaboration Rules
 
@@ -178,7 +194,10 @@ PRs are **optional** for docs-only and small, low-risk changes in personal repos
 2. Open a PR (`gh pr create ...`)
 3. Merge (`gh pr merge --squash` or `--merge` as appropriate)
 4. Delete the remote branch (auto if configured; otherwise `git push origin --delete <branch>`)
-5. Delete the local branch (`git branch -d <branch>`)
+5. Delete the local branch. Note `git branch -d` **always refuses after a squash
+   merge** — the squash rewrites the commits, so the branch is not an ancestor
+   of `main`. `finish-session` handles this: it falls back to `git branch -D`,
+   but only once it has confirmed the PR is `MERGED`.
 
 Steps 1–5 are automated by `~/scripts/finish-session` (the close-out counterpart
 to `agent-session`): it pushes, opens/reuses the PR, enables merge-when-green via
@@ -235,7 +254,8 @@ To target a branch explicitly:
 
 ## Filesystem Conventions
 
-- Prefer working in a dedicated projects directory inside WSL (commonly `~/Projects`); if unknown, ask.
+- Repos live in `/mnt/c/Users/alexa/Projects`. Scripts default there; override
+  with `AGENT_SCRIPTS_PROJECTS_DIR` or `--projects-dir`.
 - Use `/tmp` for scratch downloads/patch staging.
 - Prefer Linux CLI tools; avoid macOS-specific commands unless explicitly requested.
 
@@ -267,21 +287,22 @@ To target a branch explicitly:
 - Agent session helper: `~/scripts/agent-session` (branch + push + local snapshots)
 - Session close-out: `~/scripts/finish-session` (PR + merge-when-green + cleanup)
 - Bootstrap symlinks: `~/scripts/bootstrap-home-links --apply`
-- Project registry: `~/Projects/agent-scripts/current-projects`
+- Project registry: `/mnt/c/Users/alexa/Projects/agent-scripts/current-projects`
 - Project sync: `~/scripts/sync-projects`
 - MCP registration: `~/scripts/setup-claude-mcps`
-- Shared skills: `~/Projects/agent-scripts/skills/`
+- Shared skills: `/mnt/c/Users/alexa/Projects/agent-scripts/skills/`
 - Secrets: `~/.secrets` (mode `600`; never committed, never printed)
 
 ## Current Projects
 
-The canonical list of all projects on this machine lives in `~/Projects/agent-scripts/current-projects`.
+The canonical list of all projects on this machine lives in
+`/mnt/c/Users/alexa/Projects/agent-scripts/current-projects`.
 
 **Format:** one `owner/repo` GitHub slug per line; blank lines and `#` comments are ignored.
 
 **To add a project manually:**
 ```bash
-echo "owner/repo" >> ~/Projects/agent-scripts/current-projects
+echo "owner/repo" >> /mnt/c/Users/alexa/Projects/agent-scripts/current-projects
 ```
 
 **To sync all projects** (clone missing, pull existing):
@@ -311,13 +332,13 @@ matches on, so write it as a trigger, not a summary.
 Machine-wide skills live in **one** place and are shared by both agents:
 
 ```
-~/Projects/agent-scripts/skills/<name>/SKILL.md
+/mnt/c/Users/alexa/Projects/agent-scripts/skills/<name>/SKILL.md
 ```
 
 **Claude Code** loads the repo as a plugin. Skills are namespaced `flow:<name>`:
 
 ```
-/plugin marketplace add ~/Projects/agent-scripts
+/plugin marketplace add /mnt/c/Users/alexa/Projects/agent-scripts
 /plugin install flow@agent-scripts
 ```
 
@@ -337,7 +358,7 @@ Every skill adds to the always-on token cost of every session. Check it with
 
 Installing a plugin copies it into a snapshot under `~/.claude/plugins/cache/`,
 so editing a `SKILL.md` in the repo does **not** change what an installed session
-loads. Iterate with `claude --plugin-dir ~/Projects/agent-scripts` (plus
+loads. Iterate with `claude --plugin-dir /mnt/c/Users/alexa/Projects/agent-scripts` (plus
 `/reload-plugins`), and after committing refresh the install with:
 
 ```

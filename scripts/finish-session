@@ -74,8 +74,27 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
   die "uncommitted changes — commit or stash before finishing"
 fi
 
-ahead="$(git rev-list --count "${BASE}..HEAD" 2>/dev/null || echo 0)"
-[[ "$ahead" -gt 0 ]] || die "no commits ahead of '${BASE}' — nothing to land"
+# ── Establish the comparison base ────────────────────────────────────────────
+# Without a fetch, everything below is measured against whatever local $BASE
+# happens to be. A stale local main puts already-merged commits in the PR body;
+# no local main at all makes rev-list fail, ahead=0, and the script refuse to
+# land real work citing the wrong reason. agent-session and CLAUDE.md both
+# insist on fetching before branching — the close-out skipped it entirely.
+# Fetching is read-only, so it runs in dry-run too.
+BASE_REF="$BASE"
+if git remote get-url origin >/dev/null 2>&1; then
+  git fetch --quiet origin 2>/dev/null \
+    || warn "could not fetch origin; comparing against refs already local"
+  if git rev-parse --verify --quiet "origin/${BASE}" >/dev/null; then
+    BASE_REF="origin/${BASE}"
+  fi
+fi
+git rev-parse --verify --quiet "$BASE_REF" >/dev/null \
+  || die "cannot resolve base '${BASE}' locally or on origin — is --base correct?"
+
+ahead="$(git rev-list --count "${BASE_REF}..HEAD")" \
+  || die "cannot compare HEAD against '${BASE_REF}'"
+[[ "$ahead" -gt 0 ]] || die "no commits ahead of '${BASE_REF}' — nothing to land"
 
 # ── Derive PR title/body ─────────────────────────────────────────────────────
 derive_title() {
@@ -87,13 +106,14 @@ derive_title() {
 }
 
 [[ -n "$TITLE" ]] || TITLE="$(derive_title)"
-[[ -n "$BODY" ]]  || BODY="$(git log "${BASE}..HEAD" --pretty=format:'- %s')"
+[[ -n "$BODY" ]]  || BODY="$(git log "${BASE_REF}..HEAD" --pretty=format:'- %s')"
 
 merge_flag="--${STRATEGY}"
 
 # ── Dry-run: print the plan from local state only (no gh calls) ───────────────
 if [[ "$DRY_RUN" == true ]]; then
   echo "PR title: ${TITLE}"
+  echo "Comparing against: ${BASE_REF}"
   echo "[dry-run] git push -u origin ${BRANCH}   (only if no upstream / ahead)"
   echo "[dry-run] gh pr create --base ${BASE} --head ${BRANCH} --title \"${TITLE}\" --body <${ahead} commit(s)>"
   if [[ "$DRAFT" == true ]]; then
