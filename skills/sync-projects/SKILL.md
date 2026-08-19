@@ -31,8 +31,13 @@ Then:
 ~/scripts/sync-projects
 ```
 
-Flags: `--projects-dir DIR` (default `~/Projects`), `--registry FILE` (default
+Flags: `--projects-dir DIR` (default `$AGENT_SCRIPTS_PROJECTS_DIR`, else
+`/mnt/c/Users/alexa/Projects`), `--registry FILE` (default
 `<repo-root>/current-projects`).
+
+Repos live on `/mnt/c` so Cowork can see them. Pointing this at `~/Projects`
+clones a **second** copy of every repo onto ext4 — two working trees per
+project, both reporting clean, drifting apart silently.
 
 ## What it will not do
 
@@ -65,7 +70,7 @@ reports "up to date with 'origin/main'" until something fetches.
 ## Adding a project
 
 ```bash
-echo "owner/repo" >> ~/Projects/agent-scripts/current-projects
+echo "owner/repo" >> /mnt/c/Users/alexa/Projects/agent-scripts/current-projects
 ```
 
 `new-project` appends the slug automatically when it creates a GitHub remote.

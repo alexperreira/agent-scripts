@@ -33,6 +33,11 @@ counterpart to `agent-session` (which *starts* a session).
    it feels like one synchronous "land". `--no-wait` returns immediately after
    enabling auto-merge.
 
+   The wait is bounded — 30 minutes by default, `--timeout SECONDS` to change it
+   (`--timeout 0` waits forever). While waiting it aborts only on a *required*
+   check whose state is `fail`; a failing optional check does not stop a land
+   that auto-merge would complete anyway.
+
 ## Usage
 
 ```bash
@@ -47,10 +52,23 @@ counterpart to `agent-session` (which *starts* a session).
 
 # Preview without doing anything
 ~/scripts/finish-session --dry-run
+
+# Wait longer than the 30-minute default (queued runners, slow CI)
+~/scripts/finish-session --timeout 5400
 ```
 
 Override title/body/base/strategy with `--title`, `--body`, `--base`,
 `--merge`/`--rebase`. See `~/scripts/finish-session --help`.
+
+## After it runs
+
+Report the PR URL, the merge commit SHA, and confirm the branch was deleted.
+
+If it exits non-zero, say what actually happened rather than "the land failed" —
+the failure modes are distinct. A **timeout** means the PR did *not* land but
+auto-merge is still enabled, so it may land later on its own; report it as
+pending, never as landed. A **failing required check** means the PR is still
+open. A **closed PR** means someone rejected it.
 
 ## Low-privilege
 

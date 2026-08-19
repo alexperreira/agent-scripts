@@ -5,8 +5,8 @@
 #   scripts/sync-projects [--projects-dir DIR] [--registry FILE] [--dry-run]
 #
 # For each "owner/repo" entry in the registry file:
-#   - If ~/Projects/<repo> doesn't exist  → git clone
-#   - If it does exist                    → git pull (on default branch)
+#   - If <projects-dir>/<repo> doesn't exist  → git clone
+#   - If it does exist                        → git pull (on default branch)
 #
 # Guardrails:
 #   - Local main ahead of remote → SKIP pull, print warning
@@ -19,7 +19,10 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
 
-PROJECTS_DIR="${HOME}/Projects"
+# ~/Projects is on ext4, where Cowork cannot see it, and cloning there creates a
+# second working tree for every repo that already lives on /mnt/c — two copies
+# per project, both reporting clean. Override with AGENT_SCRIPTS_PROJECTS_DIR.
+PROJECTS_DIR="${AGENT_SCRIPTS_PROJECTS_DIR:-/mnt/c/Users/alexa/Projects}"
 REGISTRY="${SCRIPT_DIR}/../current-projects"
 DRY_RUN="false"
 GITHUB_BASE="https://github.com"
@@ -32,7 +35,9 @@ Usage:
   scripts/sync-projects [options]
 
 Options:
-  --projects-dir DIR    Base directory for repos (default: ~/Projects)
+  --projects-dir DIR    Base directory for repos
+                        (default: $AGENT_SCRIPTS_PROJECTS_DIR, else
+                        /mnt/c/Users/alexa/Projects)
   --registry FILE       Path to current-projects file
                         (default: <repo-root>/current-projects)
   --dry-run             Print actions without executing them
