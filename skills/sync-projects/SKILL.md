@@ -22,6 +22,9 @@ Preview first — this touches every repo on the machine:
 ~/scripts/sync-projects --dry-run
 ```
 
+`--dry-run` still runs `git fetch` (read-only) so the preview reflects the real
+remote state. Only `clone` and `pull` are suppressed.
+
 Then:
 
 ```bash
@@ -41,6 +44,11 @@ touching a repo when any of these hold:
 - history has diverged from the remote
 - detached HEAD, or no remote-tracking branch
 - the target path exists but is not a git repo
+- `git fetch` failed (offline, auth, or a stale `.git/index.lock`)
+
+A **skip** is not an **error**: skips are reported and the run continues at exit
+0. A failed clone or a failed `git pull --ff-only` is an error and sets a
+non-zero exit.
 
 It only ever runs `git pull --ff-only`, so it cannot create a merge commit or
 lose work. Exit status is non-zero if any repo errored.
