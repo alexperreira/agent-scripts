@@ -84,22 +84,31 @@ render_template() {
   sed "${sed_expr[@]}" "$template_path" >"$output_path"
 }
 
+# stack_has TOKEN... — true if --stack names any of these as a whole word.
+# Substring matching silently appended the wrong quickstart: "py" matched
+# numpy, "uv" matched uvicorn, "ts" matched components and tests. The stack
+# string is split on anything that is not alphanumeric/+/#/. so that
+# "react-native", "react native" and "React Native" all tokenise the same.
+stack_has() {
+  local s t
+  s="$(printf ',%s,' "$(printf '%s' "${TECH_STACK}" \
+        | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9+#.' ',')" | tr -s ',')"
+  for t in "$@"; do
+    [[ "$s" == *",${t},"* ]] && return 0
+  done
+  return 1
+}
+
 should_include_node_section() {
-  local s
-  s="$(echo "${TECH_STACK}" | tr '[:upper:]' '[:lower:]')"
-  [[ "$s" == *"ts"* || "$s" == *"typescript"* || "$s" == *"node"* || "$s" == *"pnpm"* || "$s" == *"npm"* ]]
+  stack_has ts typescript js javascript node nodejs pnpm npm yarn bun
 }
 
 should_include_python_section() {
-  local s
-  s="$(echo "${TECH_STACK}" | tr '[:upper:]' '[:lower:]')"
-  [[ "$s" == *"py"* || "$s" == *"python"* || "$s" == *"pytest"* || "$s" == *"uv"* || "$s" == *"pip"* ]]
+  stack_has py python python3 pytest uv pip poetry ruff django flask fastapi
 }
 
 should_include_mobile_section() {
-  local s
-  s="$(echo "${TECH_STACK}" | tr '[:upper:]' '[:lower:]')"
-  [[ "$s" == *"expo"* || "$s" == *"react-native"* || "$s" == *"react native"* || "$s" == *"mobile"* ]]
+  stack_has expo mobile ios android || { stack_has react && stack_has native; }
 }
 
 append_mobile_section() {
@@ -156,7 +165,12 @@ EOF
     echo
     cat <<'EOF'
 ### Notes
-- Prefer keeping the repo on the WSL filesystem (not under `/mnt/c`) for performance.
+- This repo lives under `/mnt/c` so Windows-side tools can see it. That costs
+  some filesystem speed; if a build is I/O-bound, move only the build cache
+  (`node_modules`, `.venv`, `target/`) onto ext4 rather than relocating the repo.
+- `core.fileMode` is disabled here: `/mnt/c` cannot represent the executable
+  bit, so git would otherwise report every file as changed. Set a script's mode
+  in the index with `git update-index --chmod=+x <path>`.
 - Update commands above with concrete values once the stack stabilizes.
 EOF
   } >>"$claude_path"
@@ -166,7 +180,7 @@ PROJECT_NAME=""
 VISIBILITY="private"
 TECH_STACK=""
 DESCRIPTION=""
-PROJECTS_DIR="${HOME}/Projects"
+PROJECTS_DIR="${AGENT_SCRIPTS_PROJECTS_DIR:-/mnt/c/Users/alexa/Projects}"
 LICENSE_KIND="mit"
 GITHUB_OWNER="${AGENT_SCRIPTS_OWNER:-alexperreira}"
 CREATE_REMOTE="true"
@@ -234,6 +248,40 @@ echo "Stack:   ${TECH_STACK:-<unspecified>}"
 echo "License: ${LICENSE_KIND}"
 echo
 
+# ── Preconditions ────────────────────────────────────────────────────────────
+# All of these run BEFORE mkdir, and before the dry-run exit. Previously
+# `require_cmd gh` sat after the directory, every rendered file and the initial
+# commit already existed, so a missing gh or expired auth left a half-built
+# project that the retry then refused to touch ("target already exists"). It
+# also made --dry-run a preview that could not fail, while the skill says to
+# always dry-run first.
+require_cmd git
+require_cmd sed
+require_cmd date
+
+TEMPLATE_DIR="${SCRIPT_DIR}/../templates/empty"
+[[ -d "$TEMPLATE_DIR" ]] || die "missing templates: $TEMPLATE_DIR"
+
+[[ ! -e "$TARGET_DIR" ]] || die "target already exists: $TARGET_DIR"
+
+# `git commit` below will not inherit an identity from this repo — the new
+# project is a separate tree. Advisory rather than fatal: git falls back to
+# user@hostname (with a warning) unless user.useConfigOnly is set, so an unset
+# user.email does not reliably mean the commit will fail. If it does fail, the
+# cleanup trap below removes the partial tree, which is the outcome finding 5
+# was actually about.
+if ! git config --global --get user.email >/dev/null 2>&1 \
+   && ! git config --system --get user.email >/dev/null 2>&1; then
+  warn "no global git user.email; the initial commit will use git's fallback identity."
+  warn "set one with: git config --global user.email <you@example.com>"
+fi
+
+if [[ "$CREATE_REMOTE" == "true" ]]; then
+  require_cmd gh
+  gh auth status >/dev/null 2>&1 \
+    || die "gh is not authenticated; run: gh auth login   (or pass --no-remote)"
+fi
+
 if [[ "$DRY_RUN" == "true" ]]; then
   echo "[dry-run] Would create directory and files (including docs/MEASUREMENT.md)"
   echo "[dry-run] Would init git + initial commit"
@@ -242,20 +290,26 @@ if [[ "$DRY_RUN" == "true" ]]; then
   else
     echo "[dry-run] Skipping GitHub remote creation"
   fi
+  echo "[dry-run] Preconditions checked: tooling, templates, free target path, gh auth (unless --no-remote)"
   exit 0
 fi
 
-require_cmd git
-require_cmd sed
-require_cmd date
-
-[[ ! -e "$TARGET_DIR" ]] || die "target already exists: $TARGET_DIR"
+# From here on the directory exists. If anything fails, remove the tree this
+# run created rather than leaving a half-built project the retry cannot
+# overwrite. Only ever removes a path this script just made.
+CREATED_TARGET="false"
+cleanup_partial() {
+  local rc=$?
+  if [[ $rc -ne 0 && "$CREATED_TARGET" == "true" ]]; then
+    warn "failed partway through; removing the partial project at ${TARGET_DIR}"
+    rm -rf -- "$TARGET_DIR"
+  fi
+  return $rc
+}
+trap cleanup_partial EXIT
 
 mkdir -p "$TARGET_DIR"
-
-TEMPLATE_DIR="${SCRIPT_DIR}/../templates/empty"
-
-[[ -d "$TEMPLATE_DIR" ]] || die "missing templates: $TEMPLATE_DIR"
+CREATED_TARGET="true"
 
 mkdir -p "${TARGET_DIR}/docs/active" "${TARGET_DIR}/docs/archive"
 touch "${TARGET_DIR}/docs/active/.gitkeep"
@@ -279,6 +333,14 @@ fi
 (
   cd "$TARGET_DIR"
   git init -b main >/dev/null
+  # /mnt/c cannot represent the executable bit, so without this git reports
+  # every file as modified — the 33-file mode incident.
+  case "$TARGET_DIR" in
+    /mnt/*) git config core.fileMode false ;;
+  esac
+  # `git add -A` is the one place this repo stages wholesale rather than by
+  # path. It is correct here: the tree was created moments ago by this script
+  # and contains nothing else.
   git add -A
   git commit -m "chore: init ${PROJECT_NAME}" >/dev/null
 )
@@ -301,8 +363,28 @@ if [[ "$CREATE_REMOTE" == "true" ]]; then
     if grep -qxF "$SLUG" "$REGISTRY"; then
       echo "note: ${SLUG} already in current-projects."
     else
-      echo "$SLUG" >> "$REGISTRY"
+      # Without this guard, appending to a file that does not end in a newline
+      # produces "owner/oldrepoowner/newrepo" on one line, making BOTH repos
+      # invisible to sync-projects.
+      if [[ -s "$REGISTRY" && -n "$(tail -c1 "$REGISTRY")" ]]; then
+        printf '\n' >> "$REGISTRY"
+      fi
+      printf '%s\n' "$SLUG" >> "$REGISTRY"
       echo "note: added ${SLUG} to current-projects."
+
+      # current-projects is tracked in agent-scripts, and this script does not
+      # commit it (CLAUDE.md forbids committing unattended). Left dirty,
+      # sync-projects skips agent-scripts on every subsequent run with
+      # "has uncommitted changes" — the orchestration repo silently stops
+      # syncing itself. Say so, with the exact command.
+      registry_repo="$(cd -P -- "$(dirname -- "$REGISTRY")" && pwd -P)"
+      if git -C "$registry_repo" rev-parse --git-dir >/dev/null 2>&1 \
+         && ! git -C "$registry_repo" diff --quiet -- "$REGISTRY"; then
+        echo
+        warn "${REGISTRY} is now modified and uncommitted."
+        warn "sync-projects will skip that repo until you commit it:"
+        warn "  git -C ${registry_repo} commit -m 'current-projects: ${PROJECT_NAME}' -- current-projects"
+      fi
     fi
   else
     echo "note: current-projects not found at ${REGISTRY}; skipping registration."
