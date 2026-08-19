@@ -107,11 +107,36 @@ sync_repo() {
     return 0
   fi
 
+  # Confirm this directory is actually the repo the registry names. On /mnt/c —
+  # which is case-insensitive — two slugs differing only in case resolve to the
+  # SAME directory, so the second one would fetch and fast-forward a repo it
+  # does not own. Comparing origin catches that, and any other mismatch.
+  local origin_url origin_slug
+  origin_url="$(git -C "$target" remote get-url origin 2>/dev/null || echo "")"
+  origin_slug="$(printf '%s' "$origin_url" \
+    | sed -E 's#^(https?://[^/]+/|git@[^:]+:|ssh://[^/]+/)##; s#\.git$##')"
+  if [[ -n "$origin_slug" && "${origin_slug,,}" != "${slug,,}" ]]; then
+    echo "   ⚠ WARNING: ${target} has origin '${origin_slug}', not '${slug}' — skipping" >&2
+    echo "             Two registry entries differing only in case collide on /mnt/c." >&2
+    (( skipped++ )) || true
+    return 0
+  fi
+
   # Detect current branch
   local branch
   branch=$(git -C "$target" symbolic-ref --short HEAD 2>/dev/null || echo "")
   if [[ -z "$branch" ]]; then
     echo "   ⚠ WARNING: ${target} is in detached HEAD state — skipping" >&2
+    (( skipped++ )) || true
+    return 0
+  fi
+
+  # A leftover .git/index.lock — git through the Cowork bridge can leave one
+  # behind — makes every later git write in this repo fail. Skip and say so,
+  # rather than letting the failure surface as something less obvious.
+  if [[ -e "${target}/.git/index.lock" ]]; then
+    echo "   ⚠ WARNING: ${target} has a stale .git/index.lock — skipping" >&2
+    echo "             Remove it if no git process is running: ${target}/.git/index.lock" >&2
     (( skipped++ )) || true
     return 0
   fi
@@ -198,6 +223,15 @@ echo
 
 # `|| [[ -n "$line" ]]` keeps the last entry when the registry has no trailing
 # newline — otherwise read returns non-zero and that repo is silently dropped.
+# /mnt/c is case-insensitive, so two slugs whose repo names differ only in case
+# map to one directory. Report it once, up front, rather than per-repo.
+awk -F/ '{ l=tolower($NF) } l!="" && seen[l]++ == 1 { print l }' \
+  <(sed 's/#.*//; s/[[:space:]]//g; /^$/d' "$REGISTRY") \
+  | while read -r dup; do
+      warn "registry has more than one entry resolving to directory '${dup}' (case-insensitive);"
+      warn "on ${PROJECTS_DIR} those share one directory."
+    done
+
 while IFS= read -r line || [[ -n "$line" ]]; do
   # Strip comments and blank lines
   line="${line%%#*}"

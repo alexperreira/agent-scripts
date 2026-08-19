@@ -100,7 +100,13 @@ require_cmd git
 require_cmd sed
 require_cmd date
 
-REPO_DIR="$(cd "$REPO_DIR" && pwd)"
+# -P/pwd -P so the snapshot records the real tree. The logical form recorded
+# the symlinked path (~/scripts/... rather than the repo), so the breadcrumb
+# did not identify which checkout the session ran against. The `|| die` matters
+# too: a bad --repo previously exited 1 with no message at all.
+REPO_DIR_IN="$REPO_DIR"
+REPO_DIR="$(cd -P -- "$REPO_DIR_IN" 2>/dev/null && pwd -P)" \
+  || die "cannot enter --repo directory: ${REPO_DIR_IN}"
 
 git -C "$REPO_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not a git repo: $REPO_DIR"
 

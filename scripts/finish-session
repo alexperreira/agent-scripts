@@ -70,6 +70,12 @@ BRANCH="$(git symbolic-ref --short HEAD 2>/dev/null || echo "")"
 [[ -n "$BRANCH" ]]         || die "detached HEAD — checkout a feature branch first"
 [[ "$BRANCH" != "$BASE" ]] || die "on base branch '${BASE}' — nothing to finish"
 
+GIT_DIR_PATH="$(git rev-parse --git-dir)"
+if [[ -e "${GIT_DIR_PATH}/index.lock" ]]; then
+  die "stale ${GIT_DIR_PATH}/index.lock — a git process died here.
+       Remove it if nothing is running, then re-run."
+fi
+
 if ! git diff --quiet || ! git diff --cached --quiet; then
   die "uncommitted changes — commit or stash before finishing"
 fi
