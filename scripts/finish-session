@@ -114,12 +114,23 @@ elif [[ -n "$(git rev-list '@{upstream}..HEAD' 2>/dev/null)" ]]; then
 fi
 
 # ── Ensure a PR exists ───────────────────────────────────────────────────────
-if gh pr view "$BRANCH" >/dev/null 2>&1; then
+# Ask for `--json state` rather than the full view. Two reasons: the full view
+# renders projectCards, a deprecated GraphQL field that now makes `gh pr view`
+# exit non-zero even when the PR exists — which would send us down the create
+# path for a PR that is already open. And a MERGED or CLOSED PR is not
+# reusable: treating one as "already exists" skips creation and then fails on
+# merge, so the new commits are never proposed.
+pr_state="$(gh pr view "$BRANCH" --json state --jq .state 2>/dev/null || echo "")"
+
+if [[ "$pr_state" == "OPEN" ]]; then
   echo "PR already exists for ${BRANCH}"
-elif [[ "$DRAFT" == true ]]; then
-  run gh pr create --base "$BASE" --head "$BRANCH" --title "$TITLE" --body "$BODY" --draft
 else
-  run gh pr create --base "$BASE" --head "$BRANCH" --title "$TITLE" --body "$BODY"
+  [[ -z "$pr_state" ]] || echo "most recent PR for ${BRANCH} is ${pr_state}; opening a new one"
+  if [[ "$DRAFT" == true ]]; then
+    run gh pr create --base "$BASE" --head "$BRANCH" --title "$TITLE" --body "$BODY" --draft
+  else
+    run gh pr create --base "$BASE" --head "$BRANCH" --title "$TITLE" --body "$BODY"
+  fi
 fi
 
 pr_url="$(gh pr view "$BRANCH" --json url --jq .url 2>/dev/null || echo "")"
