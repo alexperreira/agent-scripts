@@ -136,6 +136,17 @@ if [[ "$DO_MERGE" == false ]]; then
 fi
 
 # ── Enable merge-when-green ───────────────────────────────────────────────────
+# --auto lands the PR as soon as GitHub considers it mergeable. "Mergeable"
+# means CI only if branch protection *requires* a check; on an unprotected
+# branch --auto merges immediately and CI is irrelevant. The whole
+# merge-when-green story rests on that ruleset existing, so verify it rather
+# than assume it.
+required_checks="$(gh api "repos/{owner}/{repo}/branches/${BASE}/protection/required_status_checks" \
+  --jq '[.contexts[]?, (.checks[]?.context)] | unique | .[]' 2>/dev/null || true)"
+grep -qx 'scripts-check' <<<"$required_checks" || die \
+  "no required 'scripts-check' check on '${BASE}': --auto would merge without CI.
+       Re-run with --no-merge and land it yourself, or protect '${BASE}' first."
+
 run gh pr merge "$BRANCH" --auto "$merge_flag" --delete-branch
 
 if [[ "$WAIT" == false ]]; then
@@ -145,9 +156,10 @@ fi
 
 # ── Wait for merge, then clean up locally ────────────────────────────────────
 echo "Waiting for CI + auto-merge on ${pr_url} ..."
+MERGE_CONFIRMED=false
 while true; do
   state="$(gh pr view "$BRANCH" --json state --jq .state 2>/dev/null || echo "")"
-  [[ "$state" == "MERGED" ]] && break
+  if [[ "$state" == "MERGED" ]]; then MERGE_CONFIRMED=true; break; fi
   [[ "$state" == "CLOSED" ]] && die "PR was closed without merging: ${pr_url}"
   if gh pr checks "$BRANCH" 2>/dev/null | grep -qiE '\bfail'; then
     die "required checks failing — PR left open: ${pr_url}"
@@ -158,5 +170,17 @@ done
 echo "Merged. Cleaning up local branch."
 run git checkout "$BASE"
 run git pull --ff-only
-run git branch -d "$BRANCH"
+
+# A squash merge (the default) rewrites the branch's commits into one new
+# commit, so the branch tip is not an ancestor of BASE and `git branch -d`
+# refuses. Under set -e that killed the script *after* the PR had merged and
+# the remote branch was gone — a successful land reported as a failure.
+# Force-delete only when the wait loop actually observed state == MERGED.
+if ! run git branch -d "$BRANCH"; then
+  [[ "$MERGE_CONFIRMED" == true ]] || die \
+    "could not delete ${BRANCH} and its merge was never confirmed — leaving it in place"
+  warn "squash merge leaves ${BRANCH} unmerged by ancestry; PR is MERGED, deleting"
+  run git branch -D "$BRANCH"
+fi
+
 echo "Done. ${BRANCH} landed into ${BASE}."
