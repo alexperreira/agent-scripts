@@ -11,7 +11,7 @@
     {
       "name": "flow",
       "source": "./",
-      "description": "Workflow skills (project scaffolding, agent sessions, repo sync) and mobile skills (Expo, React Native)."
+      "description": "Workflow skills (agent sessions, PR close-out, project scaffolding, repo sync, planning and technical writing), engineering skills (code review, debugging, testing, performance, API and migration safety), security skills (auth, secrets, input validation, threat modeling, webhooks, supply chain), and mobile skills (Expo, React Native)."
     }
   ]
 }
