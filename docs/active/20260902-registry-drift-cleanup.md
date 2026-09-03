@@ -56,47 +56,81 @@ state, which is why this is a task doc and not a one-line append.
 
 ### Phase 1 — preserve work (blocks everything else)
 
-- [ ] Step A — push `uluhe`'s 10 commits, or confirm with Alex they should stay local. Sequential;
-      nothing else touches `uluhe` until this resolves.
-- [ ] Step B — report `lanradar`'s 14 dirty files and `Obs-sync`'s 1 dirty file to Alex. Do not
-      commit or discard them; they are not this task's authorship. Parallel-safe with Step A.
-- [ ] Step C — commit the pending `+alexperreira/uluhe` line already in the working tree on `main`.
-      Needs Alex's word, since it is his edit. Sequential before Phase 3.
+- [x] Step A — **done.** The 10 commits were on an unpushed feature branch
+      (`docs/phase3-outreach-and-mail-dns`) with no upstream, not on `main`. Pushed with `-u`;
+      `git log --branches --not --remotes` now returns 0.
+- [x] Step B — **done, still open for Alex.** `lanradar` has 14 uncommitted files and
+      `obsidian-git-sync` has 1 (`obsidian_git_sync.py`). Left untouched.
+- [x] Step C — **done.** Verified accurate first: `uluhe` is on `/mnt/c` and the dry-run reports it
+      already up to date, so the line describes reality.
 
 ### Phase 2 — resolve duplicates and empties (needs explicit approval per CLAUDE.md guardrails)
 
-- [ ] Step D — `FileParser`: confirm it holds nothing `parsnip` lacks (`git log --branches --not
-      --remotes`, plus an untracked-file check for `.env`-class files — the `wodgenerator` cleanup
-      showed git state alone is insufficient). Then `gio trash` it and fast-forward `~/Projects/parsnip`.
-- [ ] Step E — `ai-automator`: verify still empty, then `gio trash`. Parallel-safe with D.
-- [ ] Step F — stray `node_modules/`, `package.json`, `pnpm-lock.yaml` at `~/Projects` root:
-      `gio trash`. Parallel-safe with D and E.
-- [ ] Step G — `ai-curriculum`: decide with Alex — publish as a repo, fold into another, or leave
-      unmanaged. **Leave on disk either way.** Parallel-safe.
+- [x] Step D — **done.** `FileParser` had 0 unpushed, 0 dirty, 0 stashes, only `main`, and **no
+      `.env`-class files**. Trashed to `/mnt/c/.Trash-1000/files/FileParser`. `parsnip` was already
+      at `e1c9ec5`, ahead of the copy removed.
+- [x] Step E — **done.** Confirmed 0 files / 0 bytes, then trashed.
+- [x] Step F — **done.** All four were empty install artifacts (`package.json` = `{}`, lockfiles
+      with no importers, `node_modules` holding only a pnpm state file). Trashed, incl.
+      `package-lock.json`, which the original survey missed.
+- [x] Step G — **decided: leave unmanaged.** Still unbacked by any remote; that is now a known,
+      accepted state rather than an oversight.
 
-### Phase 3 — reconcile the registry (sequential; single mutable file)
+### Phase 3 — BLOCKED: the registry cannot express ADR-0001
 
-- [ ] Step H — decide per unlisted repo whether it should be tracked. `lanradar`, `walaau`,
-      `ai-girlfriend`, `root-portfolio` are straightforward appends.
-- [ ] Step I — `Obs-sync`: rename the directory to `obsidian-git-sync` **before** adding the slug,
-      otherwise `sync-projects` clones a duplicate. Do the rename first, verify, then append.
-- [ ] Step J — decide whether `chat-migrator`, `scripts-showcase`, `dep-sentry` should be cloned
-      (`sync-projects` will place them in `/mnt/c` — check none is watcher/bundler-heavy first, per
-      ADR-0001) or dropped from the registry.
-- [ ] Step K — sort the registry and note the placement rule (`/mnt/c` default, ext4 for
-      build-heavy) so the next reader knows why a listed repo may be absent from `/mnt/c`.
+Running `sync-projects --dry-run` before touching the registry surfaced a structural conflict that
+invalidates Steps H–K as originally written.
 
-### Phase 4 — verify
+**The registry is a flat list of slugs resolved against a single `PROJECTS_DIR`**
+(`scripts/sync-projects:81-82`). ADR-0001 requires **two** roots. There is no way to say "this repo
+lives on ext4" — so every ext4 repo listed in `current-projects` is a landmine: running
+`sync-projects` clones a second copy into `/mnt/c`, which is exactly the divergence that produced
+`wodgenerator` (PR #17) and `FileParser` (Step D).
 
-- [ ] Step L — `~/scripts/sync-projects --dry-run` must report zero clones and zero warnings.
-      This is the acceptance test: a clean dry-run means registry and disk agree.
-- [ ] Step M — `scripts/check`.
+This is **pre-existing, not caused by this task.** The first dry-run reported `cloned=14` — 11 of
+those already existed on ext4. Appending the unlisted ext4 repos as Step H proposed would have taken
+it to 17. After Step J's clones it stands at **12 phantom clones**: `app-policy-auditor`,
+`blog-automater`, `chat-migrator`, `clarity-pm`, `code-autopsy`, `cyber-blog`, `ghost-shell`,
+`mrclean`, `nexgensec`, `packet-punk`, `parsnip`, `wodgenerator`.
+
+- [x] Step I — **done.** `Obs-sync` renamed to `obsidian-git-sync` to match its remote. The dirty
+      file was preserved. This had to precede any registry append, or `sync-projects` would have
+      cloned a duplicate alongside it.
+- [x] Step J — **done, placed by ADR-0001 rather than by the registry's default:**
+      - `scripts-showcase` (docs only, 1KB) → `/mnt/c`, `core.fileMode false`
+      - `dep-sentry` (Python, `pyproject.toml`, no watcher) → `/mnt/c`, `core.fileMode false`
+      - `chat-migrator` (**Vite + Tailwind + pnpm**) → **ext4**, because Vite HMR depends on inotify,
+        which does not fire for Windows-side writes. Registered, so `sync-projects` will try to clone
+        it to `/mnt/c` — one of the 12 above.
+- [ ] Step H — **blocked.** Do not append `ai-girlfriend`, `root-portfolio`, `obsidian-git-sync`,
+      `lanradar`, or `walaau` until placement is expressible. `lanradar` and `walaau` are on `/mnt/c`
+      and would be safe today, but adding only those bakes in the inconsistency.
+- [ ] Step K — **blocked on the same decision.**
+
+### Phase 3a — resolve the placement conflict (needs Alex's decision)
+
+Three ways out, in the order I would pick them:
+
+1. **Add a placement column** — `owner/repo[<TAB>root]`, defaulting to `/mnt/c`. `sync-projects`
+    reads it and clones ext4 repos to `$HOME/Projects`. Registry stays one file, ADR-0001 holds, the
+    dry-run can reach zero. Costs a parser change plus a migration of the 12 rows.
+2. **Two registries** — `current-projects` and `current-projects-ext4`, with `sync-projects --root`
+    selecting. Simpler to implement, easy to let drift apart.
+3. **Register only `/mnt/c` repos** and document that ext4 repos are deliberately unmanaged. Zero
+    code change, but the registry stops being the machine's index — which is what it is for.
+
+## Phase 4 — verify
+
+- [ ] Step L — acceptance test, **revised**: `sync-projects --dry-run` reporting `cloned=0`. This is
+      unreachable until Phase 3a lands. The original doc asserted it as achievable; it never was.
+- [x] Step M — `scripts/check` passes.
 
 ## Parallel-safe notes
 
-- Phase 1 gates Phase 2 for `uluhe` only; D/E/F touch unrelated paths and can run concurrently.
+- Phase 1 gated Phase 2 for `uluhe` only; D/E/F touched unrelated paths and ran concurrently.
 - Phase 3 is strictly sequential — every step edits `current-projects`.
-- Step I's rename must precede its registry append, or the duplicate it prevents is created.
+- Step I's rename had to precede its registry append, or the duplicate it prevents is created.
+- Phase 3a is a prerequisite for the rest of Phase 3, not a parallel track.
 
 ## Risks
 
@@ -111,7 +145,19 @@ state, which is why this is a task doc and not a one-line append.
 
 ## Outputs
 
-- `current-projects` — accurate, sorted, commented
-- `docs/archive/20260902-registry-drift-cleanup.md` — this doc, on completion
-- Removed: `/mnt/c/FileParser`, `/mnt/c/ai-automator`, `~/Projects/{node_modules,package.json,pnpm-lock.yaml}`
+**Delivered**
+
+- Pushed: `uluhe` branch `docs/phase3-outreach-and-mail-dns` (10 commits)
+- Trashed (recoverable): `/mnt/c/FileParser`, `/mnt/c/ai-automator`,
+  `~/Projects/{node_modules,package.json,package-lock.json,pnpm-lock.yaml}`
 - Renamed: `~/Projects/Obs-sync` → `~/Projects/obsidian-git-sync`
+- Cloned: `scripts-showcase`, `dep-sentry` (`/mnt/c`); `chat-migrator` (ext4)
+- `current-projects` — `uluhe` line committed
+- Phantom clones in `sync-projects --dry-run`: 14 → 12
+
+**Still open**
+
+- Phase 3a decision, then Steps H and K
+- `lanradar` (14 dirty files) and `obsidian-git-sync` (1) — Alex's uncommitted work
+- `ai-curriculum` remains unbacked by choice
+- `docs/archive/20260902-registry-drift-cleanup.md` — move this doc on completion
