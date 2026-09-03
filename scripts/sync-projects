@@ -2,11 +2,21 @@
 # sync-projects — clone or update all repos listed in current-projects
 #
 # Usage:
-#   scripts/sync-projects [--projects-dir DIR] [--registry FILE] [--dry-run]
+#   scripts/sync-projects [--projects-dir DIR] [--ext4-dir DIR] [--registry FILE]
+#                         [--dry-run]
 #
-# For each "owner/repo" entry in the registry file:
-#   - If <projects-dir>/<repo> doesn't exist  → git clone
-#   - If it does exist                        → git pull (on default branch)
+# Registry lines are "owner/repo" with an optional placement column:
+#   owner/repo              → <projects-dir>/<repo>   (default, /mnt/c)
+#   owner/repo<TAB>ext4     → <ext4-dir>/<repo>       ($HOME/Projects)
+#   owner/repo<TAB>/a/path  → /a/path/<repo>
+#
+# The placement column exists because ADR-0001 splits repos across two
+# filesystems. Without it every ext4 repo listed here would be cloned a second
+# time onto /mnt/c — the divergence that produced wodgenerator and FileParser.
+#
+# For each entry:
+#   - If <root>/<repo> doesn't exist  → git clone
+#   - If it does exist                → git pull (on default branch)
 #
 # Guardrails:
 #   - Local main ahead of remote → SKIP pull, print warning
@@ -23,6 +33,8 @@ source "${SCRIPT_DIR}/lib/common.sh"
 # second working tree for every repo that already lives on /mnt/c — two copies
 # per project, both reporting clean. Override with AGENT_SCRIPTS_PROJECTS_DIR.
 PROJECTS_DIR="${AGENT_SCRIPTS_PROJECTS_DIR:-/mnt/c/Users/alexa/Projects}"
+# Second root from ADR-0001: build-heavy repos stay on ext4, where inotify fires.
+EXT4_DIR="${AGENT_SCRIPTS_EXT4_DIR:-${HOME}/Projects}"
 REGISTRY="${SCRIPT_DIR}/../current-projects"
 DRY_RUN="false"
 GITHUB_BASE="https://github.com"
@@ -35,13 +47,20 @@ Usage:
   scripts/sync-projects [options]
 
 Options:
-  --projects-dir DIR    Base directory for repos
+  --projects-dir DIR    Base directory for repos with no placement column
                         (default: $AGENT_SCRIPTS_PROJECTS_DIR, else
                         /mnt/c/Users/alexa/Projects)
+  --ext4-dir DIR        Base directory for repos marked 'ext4'
+                        (default: $AGENT_SCRIPTS_EXT4_DIR, else $HOME/Projects)
   --registry FILE       Path to current-projects file
                         (default: <repo-root>/current-projects)
   --dry-run             Print actions without executing them
   --help, -h            Show this help
+
+Registry format — one entry per line, optional whitespace-separated placement:
+  owner/repo              clone into --projects-dir
+  owner/repo    ext4      clone into --ext4-dir
+  owner/repo    /a/path   clone into an explicit absolute path
 EOF
 }
 
@@ -50,6 +69,9 @@ while [[ $# -gt 0 ]]; do
     --projects-dir)
       require_arg_value "$1" "${2:-}"
       PROJECTS_DIR="${2:-}"; shift 2 ;;
+    --ext4-dir)
+      require_arg_value "$1" "${2:-}"
+      EXT4_DIR="${2:-}"; shift 2 ;;
     --registry)
       require_arg_value "$1" "${2:-}"
       REGISTRY="${2:-}"; shift 2 ;;
@@ -78,8 +100,9 @@ errors=0
 # explicitly — a bare failing command here falls through and returns 0.
 sync_repo() {
   local slug="$1"          # owner/repo
+  local root="$2"          # already-resolved base directory
   local repo_name="${slug##*/}"
-  local target="${PROJECTS_DIR}/${repo_name}"
+  local target="${root}/${repo_name}"
   local clone_url="${GITHUB_BASE}/${slug}.git"
 
   echo "── ${slug}"
@@ -117,7 +140,8 @@ sync_repo() {
     | sed -E 's#^(https?://[^/]+/|git@[^:]+:|ssh://[^/]+/)##; s#\.git$##')"
   if [[ -n "$origin_slug" && "${origin_slug,,}" != "${slug,,}" ]]; then
     echo "   ⚠ WARNING: ${target} has origin '${origin_slug}', not '${slug}' — skipping" >&2
-    echo "             Two registry entries differing only in case collide on /mnt/c." >&2
+    echo "             Two registry entries differing only in case collide on a" >&2
+    echo "             case-insensitive root such as /mnt/c." >&2
     (( skipped++ )) || true
     return 0
   fi
@@ -218,28 +242,80 @@ sync_repo() {
 
 echo "Registry: ${REGISTRY}"
 echo "Projects: ${PROJECTS_DIR}"
+echo "ext4:     ${EXT4_DIR}"
 [[ "$DRY_RUN" == "true" ]] && echo "Mode:     dry-run"
 echo
 
+# ── Parse the registry ────────────────────────────────────────────────────────
+# Two passes. The first resolves every entry to a concrete directory so that
+# collisions can be reported up front; the second does the work. Parsing must
+# not strip interior whitespace, because that is the placement separator.
+#
 # `|| [[ -n "$line" ]]` keeps the last entry when the registry has no trailing
 # newline — otherwise read returns non-zero and that repo is silently dropped.
-# /mnt/c is case-insensitive, so two slugs whose repo names differ only in case
-# map to one directory. Report it once, up front, rather than per-repo.
-awk -F/ '{ l=tolower($NF) } l!="" && seen[l]++ == 1 { print l }' \
-  <(sed 's/#.*//; s/[[:space:]]//g; /^$/d' "$REGISTRY") \
-  | while read -r dup; do
-      warn "registry has more than one entry resolving to directory '${dup}' (case-insensitive);"
-      warn "on ${PROJECTS_DIR} those share one directory."
-    done
+declare -a SLUGS=() ROOTS=()
+lineno=0
+parse_errors=0
+
+resolve_root() {
+  case "$1" in
+    "")     printf '%s' "$PROJECTS_DIR" ;;
+    ext4)   printf '%s' "$EXT4_DIR" ;;
+    win)    printf '%s' "$PROJECTS_DIR" ;;
+    /*)     printf '%s' "$1" ;;
+    *)      return 1 ;;
+  esac
+}
 
 while IFS= read -r line || [[ -n "$line" ]]; do
-  # Strip comments and blank lines
+  (( lineno++ )) || true
   line="${line%%#*}"
-  line="${line//[[:space:]]/}"
+  # Trim leading and trailing whitespace, but keep the interior intact.
+  line="${line#"${line%%[![:space:]]*}"}"
+  line="${line%"${line##*[![:space:]]}"}"
   [[ -z "$line" ]] && continue
 
-  sync_repo "$line" || (( errors++ )) || true
+  slug="${line%%[[:space:]]*}"
+  placement="${line#"$slug"}"
+  placement="${placement#"${placement%%[![:space:]]*}"}"
+  # Only the first token is the placement; anything after it is a typo, not a
+  # third column. Saying so beats silently honouring half the line.
+  if [[ "$placement" == *[[:space:]]* ]]; then
+    warn "registry line ${lineno}: unexpected extra field in '${line}' — skipping"
+    (( parse_errors++ )) || true
+    continue
+  fi
+
+  if ! root="$(resolve_root "$placement")"; then
+    warn "registry line ${lineno}: unknown placement '${placement}' for ${slug} — skipping"
+    warn "expected 'ext4', 'win', or an absolute path."
+    (( parse_errors++ )) || true
+    continue
+  fi
+
+  SLUGS+=("$slug")
+  ROOTS+=("$root")
 done < "$REGISTRY"
+
+# A case-insensitive root (/mnt/c) maps two slugs differing only in case onto one
+# directory. Only entries sharing a root can collide, so key on root + name —
+# the same repo name under two different roots is legitimate.
+declare -A seen_targets=()
+for i in "${!SLUGS[@]}"; do
+  name="${SLUGS[$i]##*/}"
+  key="${ROOTS[$i]}/${name,,}"
+  if [[ -n "${seen_targets[$key]:-}" ]]; then
+    warn "registry has more than one entry resolving to '${key}' (case-insensitive);"
+    warn "on that root they share one directory."
+  fi
+  seen_targets["$key"]=1
+done
+
+for i in "${!SLUGS[@]}"; do
+  sync_repo "${SLUGS[$i]}" "${ROOTS[$i]}" || (( errors++ )) || true
+done
+
+(( errors += parse_errors )) || true
 
 echo
 echo "Done. cloned=${cloned} updated=${pulled} up-to-date=${uptodate} skipped=${skipped} errors=${errors}"

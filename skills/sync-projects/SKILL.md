@@ -11,9 +11,17 @@ allowed-tools: Bash, Read
 
 # sync-projects
 
-Wraps `~/scripts/sync-projects`, which walks the `current-projects` registry (one
-`owner/repo` slug per line; `#` comments and blank lines ignored) and either
-clones a missing repo or fast-forwards an existing one.
+Wraps `~/scripts/sync-projects`, which walks the `current-projects` registry and
+either clones a missing repo or fast-forwards an existing one.
+
+Each line is `owner/repo` plus an optional placement column (`#` comments and
+blank lines ignored):
+
+```
+alexperreira/uluhe                 # → /mnt/c/Users/alexa/Projects/uluhe
+alexperreira/parsnip       ext4    # → $HOME/Projects/parsnip
+alexperreira/thing         /srv/x  # → /srv/x/thing
+```
 
 ## Running it
 
@@ -33,16 +41,23 @@ Then:
 ```
 
 Flags: `--projects-dir DIR` (default `$AGENT_SCRIPTS_PROJECTS_DIR`, else
-`/mnt/c/Users/alexa/Projects`), `--registry FILE` (default
+`/mnt/c/Users/alexa/Projects`), `--ext4-dir DIR` (default
+`$AGENT_SCRIPTS_EXT4_DIR`, else `$HOME/Projects`), `--registry FILE` (default
 `<repo-root>/current-projects`).
 
-Repos live on `/mnt/c` so Cowork can see them. Pointing this at `~/Projects`
-clones a **second** copy of every repo onto ext4 — two working trees per
-project, both reporting clean, drifting apart silently.
+Most repos live on `/mnt/c` so Cowork can see them; ADR-0001 keeps build-heavy
+ones on ext4, where inotify actually fires. The placement column is what keeps
+those two facts from colliding — an ext4 repo listed without `ext4` gets cloned
+a **second** time onto `/mnt/c`, giving two working trees per project, both
+reporting clean, drifting apart silently.
 
 `/mnt/c` is case-insensitive, so two registry slugs whose repo names differ only
 in case share one directory. The script warns up front and refuses to touch a
-directory whose `origin` does not match the slug.
+directory whose `origin` does not match the slug. The collision check is
+per-root, so the same repo name under two different roots is not flagged.
+
+An unrecognised placement is reported and counted as an error rather than
+silently treated as the default.
 
 ## What it will not do
 

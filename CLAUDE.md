@@ -305,11 +305,26 @@ To target a branch explicitly:
 The canonical list of all projects on this machine lives in
 `/mnt/c/Users/alexa/Projects/agent-scripts/current-projects`.
 
-**Format:** one `owner/repo` GitHub slug per line; blank lines and `#` comments are ignored.
+**Format:** one `owner/repo` GitHub slug per line, with an optional whitespace-separated
+placement column naming the filesystem root. Blank lines and `#` comments are ignored.
+
+| Placement | Root | For |
+|---|---|---|
+| *(omitted)* | `/mnt/c/Users/alexa/Projects` | the default; Cowork can see it |
+| `ext4` | `$HOME/Projects` | build-heavy repos, per ADR-0001 |
+| `/abs/path` | that path | anything else |
+
+The column is not cosmetic. `sync-projects` resolves every entry against a root, so an ext4
+repo listed without `ext4` gets cloned a **second** time onto `/mnt/c` — two working trees,
+both reporting clean, drifting apart. That is what produced the `wodgenerator` and
+`FileParser` duplicates.
 
 **To add a project manually:**
 ```bash
+# on /mnt/c (default)
 echo "owner/repo" >> /mnt/c/Users/alexa/Projects/agent-scripts/current-projects
+# on ext4 — anything with node_modules, a bundler, or a file watcher
+printf 'owner/repo\text4\n' >> /mnt/c/Users/alexa/Projects/agent-scripts/current-projects
 ```
 
 **To sync all projects** (clone missing, pull existing):
