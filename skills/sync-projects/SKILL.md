@@ -1,7 +1,8 @@
 ---
 name: sync-projects
 description: >
-  Clone or fast-forward every owner/repo listed in current-projects into ~/Projects.
+  Clone or fast-forward every owner/repo listed in current-projects into
+  /mnt/c/Users/alexa/Projects.
   Use when the user wants to sync their repos, clone all projects, set up a new
   machine, or asks to pull everything. Also trigger when a repo turns out to be
   behind or diverged and the user wants the whole set reconciled.

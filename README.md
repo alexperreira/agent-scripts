@@ -22,22 +22,22 @@ Machine-wide workflow for Alex Perreira (WSL-first): rules, scripts, and templat
 ## Install (new machine)
 
 ```bash
-mkdir -p ~/Projects
-git clone https://github.com/alexperreira/agent-scripts.git ~/Projects/agent-scripts
-cd ~/Projects/agent-scripts
+mkdir -p /mnt/c/Users/alexa/Projects
+git clone https://github.com/alexperreira/agent-scripts.git /mnt/c/Users/alexa/Projects/agent-scripts
+cd /mnt/c/Users/alexa/Projects/agent-scripts
 scripts/bootstrap-home-links --apply
 ```
 
 This creates/updates:
-- `~/CLAUDE.md` → `~/Projects/agent-scripts/CLAUDE.md`
-- `~/scripts` → `~/Projects/agent-scripts/scripts`
-- `~/templates` → `~/Projects/agent-scripts/templates`
+- `~/CLAUDE.md` → `/mnt/c/Users/alexa/Projects/agent-scripts/CLAUDE.md`
+- `~/scripts` → `/mnt/c/Users/alexa/Projects/agent-scripts/scripts`
+- `~/templates` → `/mnt/c/Users/alexa/Projects/agent-scripts/templates`
 - `~/.codex/skills/<name>` → each skill in `skills/`
 
 Then install the skills into Claude Code as a plugin:
 
 ```
-/plugin marketplace add ~/Projects/agent-scripts
+/plugin marketplace add /mnt/c/Users/alexa/Projects/agent-scripts
 /plugin install flow@agent-scripts
 ```
 
@@ -72,7 +72,7 @@ change what an installed session loads.
 While iterating, load straight from the working tree — no install, no cache:
 
 ```bash
-claude --plugin-dir ~/Projects/agent-scripts    # then /reload-plugins after edits
+claude --plugin-dir /mnt/c/Users/alexa/Projects/agent-scripts    # then /reload-plugins after edits
 ```
 
 Once the change is committed and pushed, refresh the installed copy:

@@ -7,7 +7,7 @@ source "${SCRIPT_DIR}/lib/common.sh"
 
 usage() {
   cat <<'EOF'
-new-project — create a new repo under ~/Projects and publish to GitHub
+new-project — create a new repo under /mnt/c/Users/alexa/Projects and publish to GitHub
 
 Usage:
   scripts/new-project --name <repo-name> [options]
@@ -19,7 +19,7 @@ Options:
   --visibility          private|public (default: private)
   --stack               Free-form tech stack string used to seed CLAUDE.md
   --description         Short description for README (optional)
-  --projects-dir        Base directory (default: $HOME/Projects)
+  --projects-dir        Base directory (default: /mnt/c/Users/alexa/Projects)
   --license             mit|none (default: mit)
   --owner               GitHub owner/org (default: $AGENT_SCRIPTS_OWNER or alexperreira)
   --no-remote           Skip GitHub remote creation/push (local-only)
@@ -27,9 +27,10 @@ Options:
   --help, -h            Show this help
 
 Environment (overridden by the flags above; used as defaults):
-  AGENT_SCRIPTS_OWNER     GitHub owner/org        (default: alexperreira)
-  AGENT_SCRIPTS_AUTHOR    Author name for LICENSE (default: Alex Perreira)
-  AGENT_SCRIPTS_WEBSITE   Site/blog URL           (default: alexhacks.net)
+  AGENT_SCRIPTS_PROJECTS_DIR  Base directory          (default: /mnt/c/Users/alexa/Projects)
+  AGENT_SCRIPTS_OWNER         GitHub owner/org        (default: alexperreira)
+  AGENT_SCRIPTS_AUTHOR        Author name for LICENSE (default: Alex Perreira)
+  AGENT_SCRIPTS_WEBSITE       Site/blog URL           (default: alexhacks.net)
 
 Examples:
   scripts/new-project --name my-tool --stack "typescript, node, pnpm" --visibility private

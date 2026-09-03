@@ -256,6 +256,13 @@ To target a branch explicitly:
 
 - Repos live in `/mnt/c/Users/alexa/Projects`. Scripts default there; override
   with `AGENT_SCRIPTS_PROJECTS_DIR` or `--projects-dir`.
+- "Repos live in `/mnt/c`" is the default, not an absolute. Build-heavy repos —
+  anything with `node_modules`, a bundler, or a file watcher — stay on ext4
+  under `~/Projects`, because inotify does not fire for Windows-side writes and
+  watch mode then breaks *silently*. See
+  `docs/adr/0001-filesystem-split-and-git-boundary.md`. Both roots are real;
+  never assume a repo is missing because it is absent from one of them, and
+  never clone the same repo into both.
 - Use `/tmp` for scratch downloads/patch staging.
 - Prefer Linux CLI tools; avoid macOS-specific commands unless explicitly requested.
 
