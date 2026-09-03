@@ -16,6 +16,7 @@
 # To sync: scripts/sync-projects
 
 alexperreira/agent-scripts
+alexperreira/ai-girlfriend       ext4
 alexperreira/app-policy-auditor  ext4
 alexperreira/blog-automater      ext4
 alexperreira/chat-migrator       ext4
@@ -27,8 +28,11 @@ alexperreira/ghost-shell         ext4
 alexperreira/lanradar
 alexperreira/mrclean             ext4
 alexperreira/nexgensec           ext4
+alexperreira/obsidian-git-sync   ext4
 alexperreira/packet-punk         ext4
 alexperreira/parsnip             ext4
+alexperreira/root-portfolio      ext4
 alexperreira/scripts-showcase
 alexperreira/uluhe
+alexperreira/walaau
 alexperreira/wodgenerator        ext4
