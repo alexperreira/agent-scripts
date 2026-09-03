@@ -102,10 +102,9 @@ it to 17. After Step J's clones it stands at **12 phantom clones**: `app-policy-
       - `chat-migrator` (**Vite + Tailwind + pnpm**) → **ext4**, because Vite HMR depends on inotify,
         which does not fire for Windows-side writes. Registered, so `sync-projects` will try to clone
         it to `/mnt/c` — one of the 12 above.
-- [x] Step H — **unblocked by Phase 3a; partially done.** `lanradar` added (Alex's call). The 12
-      ext4 repos are now marked `ext4`. `ai-girlfriend`, `root-portfolio`, `obsidian-git-sync`, and
-      `walaau` remain cloned-but-unlisted, pending Alex — the format can express them now, so this is
-      a decision, no longer a blocker.
+- [x] Step H — **done.** All cloned repos are registered: `lanradar`, then `ai-girlfriend`,
+      `root-portfolio`, `obsidian-git-sync` (ext4) and `walaau` (`/mnt/c`). 21 entries; the dry-run
+      adopts every existing checkout rather than cloning duplicates.
 - [x] Step K — **done.** Registry sorted, placement rule documented in its header, in `CLAUDE.md`,
       and in the `sync-projects` skill.
 
@@ -165,12 +164,13 @@ Two latent bugs in `new-project`'s auto-registration surfaced while wiring this 
 - `current-projects` — `uluhe` line committed
 - Phantom clones in `sync-projects --dry-run`: 14 → 12
 
-**Still open**
+**Still open — machine hygiene, not registry work**
 
-- `ai-girlfriend`, `root-portfolio`, `obsidian-git-sync`, `walaau` — cloned but unlisted; the
-  registry can express them now, it is just a decision
 - `lanradar` has a stale `.git/index.lock` (an artifact of git through the Cowork bridge, per
   ADR-0001). `sync-projects` skips it until the lock is removed.
 - `lanradar` (14 dirty files) and `obsidian-git-sync` (1) — Alex's uncommitted work
 - `ai-curriculum` remains unbacked by choice
-- `docs/archive/20260902-registry-drift-cleanup.md` — move this doc on completion
+- `ai-curriculum` stays unbacked by choice — a known state, not an oversight
+
+**Result:** `sync-projects --dry-run` goes from `cloned=14` (11 of them duplicates waiting to
+happen) to `cloned=0` across 21 registered repos.
