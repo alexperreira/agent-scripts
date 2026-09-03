@@ -102,27 +102,37 @@ it to 17. After Step J's clones it stands at **12 phantom clones**: `app-policy-
       - `chat-migrator` (**Vite + Tailwind + pnpm**) → **ext4**, because Vite HMR depends on inotify,
         which does not fire for Windows-side writes. Registered, so `sync-projects` will try to clone
         it to `/mnt/c` — one of the 12 above.
-- [ ] Step H — **blocked.** Do not append `ai-girlfriend`, `root-portfolio`, `obsidian-git-sync`,
-      `lanradar`, or `walaau` until placement is expressible. `lanradar` and `walaau` are on `/mnt/c`
-      and would be safe today, but adding only those bakes in the inconsistency.
-- [ ] Step K — **blocked on the same decision.**
+- [x] Step H — **unblocked by Phase 3a; partially done.** `lanradar` added (Alex's call). The 12
+      ext4 repos are now marked `ext4`. `ai-girlfriend`, `root-portfolio`, `obsidian-git-sync`, and
+      `walaau` remain cloned-but-unlisted, pending Alex — the format can express them now, so this is
+      a decision, no longer a blocker.
+- [x] Step K — **done.** Registry sorted, placement rule documented in its header, in `CLAUDE.md`,
+      and in the `sync-projects` skill.
 
-### Phase 3a — resolve the placement conflict (needs Alex's decision)
+### Phase 3a — resolve the placement conflict — **DONE (option 1)**
 
-Three ways out, in the order I would pick them:
+Placement column implemented. `owner/repo` optionally followed by whitespace and a root:
+`ext4` → `--ext4-dir` (default `$HOME/Projects`), `win` or omitted → `--projects-dir`, or an
+absolute path used verbatim. Unrecognised placements are reported and counted as errors rather
+than silently defaulted.
 
-1. **Add a placement column** — `owner/repo[<TAB>root]`, defaulting to `/mnt/c`. `sync-projects`
-    reads it and clones ext4 repos to `$HOME/Projects`. Registry stays one file, ADR-0001 holds, the
-    dry-run can reach zero. Costs a parser change plus a migration of the 12 rows.
-2. **Two registries** — `current-projects` and `current-projects-ext4`, with `sync-projects --root`
-    selecting. Simpler to implement, easy to let drift apart.
-3. **Register only `/mnt/c` repos** and document that ext4 repos are deliberately unmanaged. Zero
-    code change, but the registry stops being the machine's index — which is what it is for.
+Parsing had to be rewritten, not extended: the old loop stripped **all** whitespace from each line
+(`line="${line//[[:space:]]/}"`), which would have eaten the separator. The duplicate check also
+keyed on `awk -F/ '{print $NF}'`, which would have read the placement as the repo name. It is now
+per-root, so the same repo name under two different roots is legitimate rather than flagged.
+
+Two latent bugs in `new-project`'s auto-registration surfaced while wiring this up, both fixed here:
+
+- `grep -qxF "$SLUG"` matched the whole line, so it missed every entry carrying a placement column
+  and would have appended a **duplicate row** for an already-registered repo. Now matches field 1.
+- It appended a bare slug regardless of `--projects-dir`, so scaffolding into `~/Projects` created
+  precisely the unmarked-ext4-repo landmine this phase removed. It now records the placement.
 
 ## Phase 4 — verify
 
-- [ ] Step L — acceptance test, **revised**: `sync-projects --dry-run` reporting `cloned=0`. This is
-      unreachable until Phase 3a lands. The original doc asserted it as achievable; it never was.
+- [x] Step L — **passes.** `sync-projects --dry-run` reports `cloned=0` (was 14). Remaining skips
+      are legitimate: `agent-scripts` has this task's uncommitted work, and `lanradar` has a stale
+      `.git/index.lock`.
 - [x] Step M — `scripts/check` passes.
 
 ## Parallel-safe notes
@@ -157,7 +167,10 @@ Three ways out, in the order I would pick them:
 
 **Still open**
 
-- Phase 3a decision, then Steps H and K
+- `ai-girlfriend`, `root-portfolio`, `obsidian-git-sync`, `walaau` — cloned but unlisted; the
+  registry can express them now, it is just a decision
+- `lanradar` has a stale `.git/index.lock` (an artifact of git through the Cowork bridge, per
+  ADR-0001). `sync-projects` skips it until the lock is removed.
 - `lanradar` (14 dirty files) and `obsidian-git-sync` (1) — Alex's uncommitted work
 - `ai-curriculum` remains unbacked by choice
 - `docs/archive/20260902-registry-drift-cleanup.md` — move this doc on completion

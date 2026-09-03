@@ -361,7 +361,10 @@ if [[ "$CREATE_REMOTE" == "true" ]]; then
   REGISTRY="${SCRIPT_DIR}/../current-projects"
   SLUG="${GITHUB_OWNER}/${PROJECT_NAME}"
   if [[ -f "$REGISTRY" ]]; then
-    if grep -qxF "$SLUG" "$REGISTRY"; then
+    # Match on the first field only. Registry lines may carry a placement
+    # column, so a whole-line match against the bare slug misses
+    # "owner/repo<TAB>ext4" and appends a duplicate entry for the same repo.
+    if awk '{ sub(/#.*/, ""); print $1 }' "$REGISTRY" | grep -qxF "$SLUG"; then
       echo "note: ${SLUG} already in current-projects."
     else
       # Without this guard, appending to a file that does not end in a newline
@@ -370,8 +373,23 @@ if [[ "$CREATE_REMOTE" == "true" ]]; then
       if [[ -s "$REGISTRY" && -n "$(tail -c1 "$REGISTRY")" ]]; then
         printf '\n' >> "$REGISTRY"
       fi
-      printf '%s\n' "$SLUG" >> "$REGISTRY"
-      echo "note: added ${SLUG} to current-projects."
+      # Record where the repo was actually scaffolded. Appending a bare slug
+      # for a repo created outside the default root makes sync-projects clone a
+      # SECOND copy onto /mnt/c — the divergence ADR-0001 and the placement
+      # column exist to prevent.
+      registry_placement=""
+      case "$PROJECTS_DIR" in
+        /mnt/c/Users/alexa/Projects) ;;
+        "${HOME}/Projects")          registry_placement="ext4" ;;
+        *)                           registry_placement="$PROJECTS_DIR" ;;
+      esac
+      if [[ -n "$registry_placement" ]]; then
+        printf '%s\t%s\n' "$SLUG" "$registry_placement" >> "$REGISTRY"
+        echo "note: added ${SLUG} (${registry_placement}) to current-projects."
+      else
+        printf '%s\n' "$SLUG" >> "$REGISTRY"
+        echo "note: added ${SLUG} to current-projects."
+      fi
 
       # current-projects is tracked in agent-scripts, and this script does not
       # commit it (CLAUDE.md forbids committing unattended). Left dirty,

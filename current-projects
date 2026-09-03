@@ -1,22 +1,34 @@
-# current-projects — one GitHub slug (owner/repo) per line
+# current-projects — one entry per line: owner/repo [placement]
+#
+# Placement is optional and names the filesystem root the repo lives on:
+#   (omitted)   /mnt/c/Users/alexa/Projects  — the default; Cowork can see it
+#   ext4        $HOME/Projects               — build-heavy repos (ADR-0001)
+#   /abs/path   an explicit root
+#
+# ADR-0001 splits repos across two filesystems: anything with node_modules, a
+# bundler, or a file watcher stays on ext4, because inotify does not fire for
+# Windows-side writes and watch mode then breaks silently. Marking such a repo
+# 'ext4' is what stops sync-projects cloning a second copy onto /mnt/c — the
+# divergence that produced wodgenerator and FileParser.
+#
 # Blank lines and lines starting with # are ignored.
 # Managed by: scripts/new-project (auto-appends on create)
-# To add manually: echo "owner/repo" >> current-projects
 # To sync: scripts/sync-projects
 
 alexperreira/agent-scripts
-alexperreira/app-policy-auditor
-alexperreira/code-autopsy
-alexperreira/clarity-pm
-alexperreira/cyber-blog
-alexperreira/ghost-shell
-alexperreira/mrclean
-alexperreira/parsnip
-alexperreira/wodgenerator
-alexperreira/packet-punk
-alexperreira/blog-automater
-alexperreira/chat-migrator
-alexperreira/scripts-showcase
+alexperreira/app-policy-auditor  ext4
+alexperreira/blog-automater      ext4
+alexperreira/chat-migrator       ext4
+alexperreira/clarity-pm          ext4
+alexperreira/code-autopsy        ext4
+alexperreira/cyber-blog          ext4
 alexperreira/dep-sentry
-alexperreira/nexgensec
+alexperreira/ghost-shell         ext4
+alexperreira/lanradar
+alexperreira/mrclean             ext4
+alexperreira/nexgensec           ext4
+alexperreira/packet-punk         ext4
+alexperreira/parsnip             ext4
+alexperreira/scripts-showcase
 alexperreira/uluhe
+alexperreira/wodgenerator        ext4

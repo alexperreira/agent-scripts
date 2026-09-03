@@ -114,6 +114,25 @@ expect_fail_contains "unknown argument: --nope" "${SCRIPT_DIR}/setup-claude-mcps
 expect_fail_contains "missing value for --title" "${SCRIPT_DIR}/finish-session" --title
 expect_fail_contains "missing value for --timeout" "${SCRIPT_DIR}/finish-session" --timeout
 
+echo "==> sync-projects placement column check"
+SP_TMP="$(mktemp -d)"
+sp_reg="${SP_TMP}/registry"
+printf 'a/plain\na/onext4\text4\na/onwin\twin\na/absolute\t%s/explicit\na/bogus\tnowhere\na/lastline\text4' \
+  "$SP_TMP" >"$sp_reg"
+sp_out="$("${SCRIPT_DIR}/sync-projects" --registry "$sp_reg" \
+  --projects-dir "${SP_TMP}/win" --ext4-dir "${SP_TMP}/ext4" --dry-run 2>&1 || true)"
+# No placement -> --projects-dir; 'ext4' -> --ext4-dir; an absolute path is used verbatim.
+grep -qF "cloning into ${SP_TMP}/win/plain"      <<<"$sp_out" || die "sync-projects: default placement not honoured"
+grep -qF "cloning into ${SP_TMP}/ext4/onext4"    <<<"$sp_out" || die "sync-projects: ext4 placement not honoured"
+grep -qF "cloning into ${SP_TMP}/win/onwin"      <<<"$sp_out" || die "sync-projects: win placement not honoured"
+grep -qF "cloning into ${SP_TMP}/explicit/absolute" <<<"$sp_out" || die "sync-projects: absolute placement not honoured"
+# An unparseable placement must be reported and counted, never silently defaulted.
+grep -q "unknown placement 'nowhere'"            <<<"$sp_out" || die "sync-projects: bad placement not reported"
+grep -qF "cloning into ${SP_TMP}/win/bogus"      <<<"$sp_out" && die "sync-projects: bad placement silently defaulted"
+# A registry with no trailing newline must not drop its last entry.
+grep -qF "cloning into ${SP_TMP}/ext4/lastline"  <<<"$sp_out" || die "sync-projects: last entry dropped without trailing newline"
+rm -rf "$SP_TMP"
+
 echo "==> common.sh run() dry-run check"
 run_out="$(DRY_RUN=true bash -c 'source "$1"; run echo hi' _ "${SCRIPT_DIR}/lib/common.sh")"
 [[ "$run_out" == "[dry-run] echo hi" ]] || die "run() dry-run output unexpected: ${run_out}"
