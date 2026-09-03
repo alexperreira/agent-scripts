@@ -1,10 +1,10 @@
 # Project generator
 
-This repo ships a simple generator for new projects that live under `~/Projects` (WSL-first) and publish to GitHub under `@alexperreira`.
+This repo ships a simple generator for new projects that live under `/mnt/c/Users/alexa/Projects` (WSL-first, on the Windows drive so Cowork can see them — see `docs/adr/0001-filesystem-split-and-git-boundary.md`) and publish to GitHub under `@alexperreira`.
 
 ## What it does
 
-- Creates `~/Projects/<name>`
+- Creates `/mnt/c/Users/alexa/Projects/<name>`
 - Writes a minimal starter layout (README, `.gitignore`, project-scoped `CLAUDE.md`, optional MIT `LICENSE`)
 - Uses `--stack` to seed the project `CLAUDE.md` with suggested commands for common stacks (currently Node/TS and Python).
 - Initializes a git repo on `main` with an initial commit
@@ -27,7 +27,7 @@ scripts/new-project --help
 ## Defaults
 
 - `--visibility`: `private`
-- `--projects-dir`: `$HOME/Projects`
+- `--projects-dir`: `$AGENT_SCRIPTS_PROJECTS_DIR`, else `/mnt/c/Users/alexa/Projects`
 - `--owner`: `alexperreira`
 - `--license`: `mit`
 
